@@ -1,18 +1,18 @@
-/*
- * Copyright 2013-2015 QAPROSOFT (http://qaprosoft.com/).
+/*******************************************************************************
+ * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+ *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.webdriver;
 
 import java.util.Map;
@@ -21,23 +21,21 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.apache.log4j.Logger;
 import org.apache.log4j.NDC;
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.remote.DesiredCapabilities;
-import org.openqa.selenium.remote.UnreachableBrowserException;
 import org.testng.Assert;
 
 import com.qaprosoft.carina.browsermobproxy.ProxyPool;
 import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
-import com.qaprosoft.carina.core.foundation.http.HttpClient;
 import com.qaprosoft.carina.core.foundation.report.Artifacts;
 import com.qaprosoft.carina.core.foundation.report.ReportContext;
 import com.qaprosoft.carina.core.foundation.utils.Configuration;
 import com.qaprosoft.carina.core.foundation.utils.Configuration.DriverMode;
 import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
-import com.qaprosoft.carina.core.foundation.utils.R;
+import com.qaprosoft.carina.core.foundation.utils.common.CommonUtils;
+import com.qaprosoft.carina.core.foundation.webdriver.core.factory.DriverFactory;
 import com.qaprosoft.carina.core.foundation.webdriver.device.Device;
 import com.qaprosoft.carina.core.foundation.webdriver.device.DevicePool;
-
-import net.lightbody.bmp.BrowserMobProxy;
 
 public final class DriverPool {
 	private static final Logger LOGGER = Logger.getLogger(DriverPool.class);
@@ -47,8 +45,7 @@ public final class DriverPool {
 	protected static WebDriver single_driver;
 
 	private static final ConcurrentHashMap<Long, ConcurrentHashMap<String, WebDriver>> drivers = new ConcurrentHashMap<Long, ConcurrentHashMap<String, WebDriver>>();
-	private static final ConcurrentHashMap<Long, BrowserMobProxy> proxies = new ConcurrentHashMap<Long, BrowserMobProxy>();
-	
+
 	protected static ThreadLocal<Integer> adbVideoRecorderPid = new ThreadLocal<Integer>();
 	
 	/**
@@ -74,6 +71,7 @@ public final class DriverPool {
 	 * 
 	 * @return default WebDriver
 	 */
+	@Deprecated
 	public static WebDriver getExistingDriver() {
 		ConcurrentHashMap<String, WebDriver> currentDrivers = getDrivers();
 		if (currentDrivers.size() == 0) {
@@ -81,7 +79,7 @@ public final class DriverPool {
 		}
 		
 		if (currentDrivers.size() > 0) {
-			return currentDrivers.get(0);
+			return currentDrivers.entrySet().iterator().next().getValue();	
 		}
 		
 		return getDriver(DEFAULT);
@@ -166,34 +164,42 @@ public final class DriverPool {
 	 */
 	public static WebDriver restartDriver(boolean isSameDevice) {
 		WebDriver drv = getDriver(DEFAULT);
-		Device device = null;
+		Device device = DevicePool.getNullDevice();
 		if (isSameDevice) {
 			device = DevicePool.getDevice();
 		}
 		
+		
 		try {
-			LOGGER.debug("Driver restarting..." + drv);
+			LOGGER.debug("Driver restarting...");
 			deregisterDriver(DEFAULT);
 			if (!isSameDevice) {
 				DevicePool.deregisterDevice();
 			}
 
 			drv.quit();
-			LOGGER.debug("Driver exited during restart..." + drv);
-		} catch (UnreachableBrowserException e) {
-			//do not remove this handler as AppiumDriver still has it
-			LOGGER.debug("unable to quit as sesion was not found" + drv);
+
+			LOGGER.debug("Driver exited during restart...");
+		} catch (WebDriverException e) {
+			LOGGER.debug("Error message detected during driver restart: " + e.getMessage(), e);
+			// do nothing
 		} catch (Exception e) {
-			LOGGER.warn("Error discovered during driver restart: ", e);
+			LOGGER.debug("Error discovered during driver restart: " + e.getMessage(), e);
+
+			// TODO: it seems like BROWSER_TIMEOUT or NODE_FORWARDING should be handled here as well
+			if (!e.getMessage().contains("Session ID is null.")) {
+				throw e;
+			}
+			
 		} finally {
 			NDC.pop();
 		}
-
+		
 		//start default driver. Device can be nullDevice...
 		return createDriver(DEFAULT, null, null, device);
 
 	}
-
+	
 	/**
 	 * Quit default driver
 	 */
@@ -220,21 +226,29 @@ public final class DriverPool {
 		}
 
 		try {
-			LOGGER.debug("Driver exiting..." + drv);
+			LOGGER.debug("Driver exiting..." + name);
 			deregisterDriver(name);
 			DevicePool.deregisterDevice();
+
 			drv.quit();
-			LOGGER.debug("Driver exited..." + drv);
-		} catch (UnreachableBrowserException e) {
-			//do not remove this handler as AppiumDriver still has it
-			LOGGER.debug("unable to quit as sesion was not found" + drv);
+
+			LOGGER.debug("Driver exited..." + name);
+		} catch (WebDriverException e) {
+			LOGGER.debug("Error message detected during driver verification: " + e.getMessage(), e);
+			// do nothing
 		} catch (Exception e) {
-			LOGGER.warn("Error discovered during driver quit: " + e.getMessage());
+			LOGGER.debug("Error discovered during driver quit: " + e.getMessage(), e);
+
+			// TODO: it seems like BROWSER_TIMEOUT or NODE_FORWARDING should be handled here as well
+			if (!e.getMessage().contains("Session ID is null.")) {
+				throw e;
+			}
+			
 		} finally {
 			// TODO analyze how to forcibly kill session on device
 			NDC.pop();
 		}
-	}
+	}		
 
 	/**
 	 * Quit all drivers registered for current thread/test
@@ -274,33 +288,23 @@ public final class DriverPool {
 		
 		// 1 - is default run without retry
 		int maxCount = Configuration.getInt(Parameter.INIT_RETRY_COUNT) + 1;
-		while (!init & count++ < maxCount) {
+		while (!init && count++ < maxCount) {
 			try {
 				LOGGER.debug("initDriver start...");
 				
 				//TODO: move browsermob startup to this location
-				startProxy();
+				ProxyPool.startProxy();
 
-				
-				//TODO: remove or move device manipulation to MobileFactory
-				// for local runs try to init device from capabilities
-				if (!device.isNull()) {
-					// turn on mobile device display if necessary. action can be done after registering available device with thread
-					// there is no sense to clean cache and reinstall app if we request dedicated device
-					device.screenOn();
-					
-					device.restartAppium();
-					device.clearAppData();
-					
-					// verify if valid build is already installed and uninstall only in case of any difference 
-					device.reinstallApp();
-				}
-				
 				drv = DriverFactory.create(name, device, capabilities, seleniumHost);
 				registerDriver(drv, name);
 
 				init = true;
-				// push custom device name  for log4j default messages
+
+				if (device.isNull()) {
+					//During driver creation we choose device and assign it to the test thread 
+					device = DevicePool.getDevice();
+				}
+				// push custom device name  for log4j default messages				
 				if (!device.isNull()) {
 					NDC.push(" [" + device.getName() + "] ");
 				}
@@ -312,10 +316,10 @@ public final class DriverPool {
 				// DevicePool.ignoreDevice();
 				DevicePool.deregisterDevice();
 				LOGGER.error(
-						String.format("Driver initialization '%s' FAILED for selenium: %s! Retry %d of %d time - %s",
-								name, seleniumHost, count, maxCount, thr.getMessage()), thr);
+						String.format("Driver initialization '%s' FAILED! Retry %d of %d time - %s",
+								name, count, maxCount, thr.getMessage()), thr);
 				init_throwable = thr;
-				pause(Configuration.getInt(Parameter.INIT_RETRY_INTERVAL));
+				CommonUtils.pause(Configuration.getInt(Parameter.INIT_RETRY_INTERVAL));
 			}
 		}
 
@@ -352,7 +356,7 @@ public final class DriverPool {
 		Device device = DevicePool.getDevice();
 		if (!device.isNull()) {
 			device.stopRecording(adbVideoRecorderPid.get());
-			pause(3); // very often video from device is black. waiting
+			CommonUtils.pause(3); // very often video from device is black. waiting
 						// before pulling the file
 
 			String videoDir = ReportContext.getArtifactsFolder().getAbsolutePath();
@@ -399,7 +403,7 @@ public final class DriverPool {
 		currentDrivers.put(name, driver);
 		Assert.assertTrue(drivers.get(threadId).containsKey(name),
 				"Driver '" + name + "' was not registered in map for thread: " + threadId);
-		LOGGER.debug("##########   REGISTER threadId: " + threadId + "; driver: " + driver);
+		LOGGER.debug("##########   REGISTER driver for threadId: " + threadId);
 	}
 
 	/**
@@ -418,6 +422,34 @@ public final class DriverPool {
 			return false;
 		}
 		return currentDrivers.containsKey(name);
+	}
+	
+	/**
+	 * Check if driver is still valid
+	 * 
+	 * @param drv
+	 *            WebDriver
+	 * @return boolean
+	 */
+	public static boolean isValid(WebDriver drv) {
+		boolean valid = false;
+		try {
+			LOGGER.debug("Starting driver isValid verification...");
+			if (drv != null && !drv.toString().contains("null")) {
+				valid = true;
+				LOGGER.debug("Driver verified successfully...");
+			}
+		} catch (WebDriverException e) {
+			LOGGER.debug("Error message detected during driver verification: " + e.getMessage(), e);
+			//do nothing
+		} catch (Exception e) {
+			//TODO: it seems like BROWSER_TIMEOUT or NODE_FORWARDING should be handled here as well
+			if (!e.getMessage().contains("Session ID is null.")) {
+				throw e;
+			}
+			// otherwise do nothing
+		}
+		return valid;
 	}
 
 	/**
@@ -445,8 +477,7 @@ public final class DriverPool {
 		ConcurrentHashMap<String, WebDriver> currentDrivers = getDrivers();
 
 		if (currentDrivers.containsKey(name)) {
-			WebDriver drv = currentDrivers.get(name);
-			LOGGER.debug("########## DEREGISTER threadId: " + threadId + "; driver: " + drv);
+			LOGGER.debug("########## DEREGISTER driver for threadId: " + threadId);
 			currentDrivers.remove(name);
 
 			if (Configuration.getDriverMode() == DriverMode.SUITE_MODE && DEFAULT.equals(name)) {
@@ -497,6 +528,8 @@ public final class DriverPool {
 		deregisterDriver(name);
 		registerDriver(driver, name);
 	}
+	
+	
 
 	/**
 	 * Return all drivers registered in the DriverPool for this thread
@@ -534,137 +567,4 @@ public final class DriverPool {
 		return java.util.Arrays.copyOf(threads, n);
 	}
 
-	/**
-	 * Pause for specified timeout.
-	 * 
-	 * @param timeout
-	 *            in seconds.
-	 */
-	private static void pause(long timeout) {
-		try {
-			Thread.sleep(timeout * 1000);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-	}
-
-	// ------------------------- BOWSERMOB PROXY ---------------------
-	// TODO: investigate possibility to return interface to support JettyProxy
-	/**
-	 * start BrowserMobProxy Server
-	 * 
-	 * @return BrowserMobProxy
-	 * 
-	 */
-	public static BrowserMobProxy startProxy() {
-		if (!Configuration.getBoolean(Parameter.BROWSERMOB_PROXY)) {
-			return null;
-		}
-		// integrate browserMob proxy if required here
-		BrowserMobProxy proxy = null;
-		long threadId = Thread.currentThread().getId();
-		if (proxies.containsKey(threadId)) {
-			proxy = proxies.get(threadId);
-		} else {
-			proxy = ProxyPool.createProxy(Configuration.getInt(Parameter.BROWSERMOB_PORT));
-			proxies.put(Thread.currentThread().getId(), proxy);
-		}
-		
-		if (!proxy.isStarted()) {
-			LOGGER.info("Starting BrowserMob proxy...");
-			proxy.start(Configuration.getInt(Parameter.BROWSERMOB_PORT));
-		} else {
-			LOGGER.info("BrowserMob proxy is already started on port " + proxy.getPort());
-		}
-
-		Integer port = proxy.getPort();
-
-		String currentIP = HttpClient.getIpAddress();
-		LOGGER.warn("Set http/https proxy settings ONLY to use with BrowserMobProxy host: " + currentIP + "; port: " + port);
-
-		//TODO: double check mobile proxy support
-		R.CONFIG.put("proxy_host", currentIP);
-		R.CONFIG.put("proxy_port", port.toString());
-		R.CONFIG.put("proxy_protocols", "http,https");
-
-		return proxy;
-	}
-
-	// https://github.com/lightbody/browsermob-proxy/issues/264 'started' flag is not set to false after stopping BrowserMobProxyServer
-	// Due to the above issue we can't control BrowserMob isRunning state and shouldn't stop it
-	// TODO: investigate possibility to clean HAR files if necessary
-	
-	/**
-	 * stop BrowserMobProxy Server
-	 * 
-	 */
-	/*
-	public static void stopProxy() {
-		long threadId = Thread.currentThread().getId();
-
-		LOGGER.debug("stopProxy starting...");
-		if (proxies.containsKey(threadId)) {
-			BrowserMobProxy proxy = proxies.get(threadId);
-			if (proxy != null) {
-				LOGGER.debug("Found registered proxy by thread: " + threadId);
-
-				if (proxy.isStarted()) {
-					LOGGER.info("Stopping BrowserMob proxy...");
-					proxy.stop();
-				} else {
-					LOGGER.info("Stopping BrowserMob proxy skipped as it is not started.");
-				}
-			}
-			proxies.remove(threadId);
-		}
-		LOGGER.debug("stopProxy finished...");
-	}*/
-
-	/**
-	 * get registered BrowserMobProxy Server
-	 * 
-	 * @return BrowserMobProxy
-	 * 
-	 */
-	public static BrowserMobProxy getProxy() {
-		BrowserMobProxy proxy = null;
-		long threadId = Thread.currentThread().getId();
-		if (proxies.containsKey(threadId)) {
-			proxy = proxies.get(threadId);
-		} else {
-			Assert.fail("There is not registered BrowserMobProxy for thread: " + threadId);
-		}
-		return proxy;
-	}
-	
-	/**
-	 * return true if proxy is already registered
-	 * 
-	 * @return boolean
-	 * 
-	 */
-	public static boolean isProxyRegistered() {
-		long threadId = Thread.currentThread().getId();
-		return proxies.containsKey(threadId);
-	}
-
-	/**
-	 * register custom BrowserMobProxy Server
-	 * 
-	 * @param proxy
-	 *            custom BrowserMobProxy
-	 * 
-	 */
-	public static void registerProxy(BrowserMobProxy proxy) {
-		long threadId = Thread.currentThread().getId();
-		if (proxies.containsKey(threadId)) {
-			LOGGER.warn("Existing proxy is detected and will be overriten");
-			// No sense to stop as it is not supported
-			proxies.remove(threadId);
-		}
-		
-		LOGGER.info("Register custom proxy with thread: " + threadId);
-		proxies.put(threadId, proxy);
-	}
-	
 }

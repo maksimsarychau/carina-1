@@ -1,3 +1,18 @@
+/*******************************************************************************
+ * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *******************************************************************************/
 package com.qaprosoft.carina.core.gui.mobile.devices.android.phone.pages.settings;
 
 import com.qaprosoft.carina.core.foundation.utils.mobile.MobileUtils;
@@ -44,7 +59,7 @@ public class DateTimeSettingsPage extends MobileAbstractPage {
     public void openTimeZoneSetting() {
         boolean found = selectTimeZone.clickIfPresent(SHORT_TIMEOUT);
         if (!found) {
-            boolean scrolled = MobileUtils.swipeInContainerTillElement(
+            boolean scrolled = MobileUtils.swipe(
                     selectTimeZone,
                     scrollableContainer);
             if (scrolled) {
@@ -72,13 +87,13 @@ public class DateTimeSettingsPage extends MobileAbstractPage {
         //TODO: Think how to cover GMT+3:00 instead of GMT+03:00 on some devices.
         if (scrollableContainer.isElementPresent(SHORT_TIMEOUT)) {
             LOGGER.info("Scrollable container present.");
-            boolean scrolled = MobileUtils.swipeInContainerTillElement(
+            boolean scrolled = MobileUtils.swipe(
                     format(tzSelectionBase, tz),
                     scrollableContainer, defaultSwipeTime);
             if (!scrolled) {
                 LOGGER.info("Probably we have long list. Let's increase swipe attempts.");
                 defaultSwipeTime = 30;
-                scrolled = MobileUtils.swipeInContainerTillElement(
+                scrolled = MobileUtils.swipe(
                         format(tzSelectionBase, tz),
                         scrollableContainer, defaultSwipeTime);
             }
@@ -95,7 +110,7 @@ public class DateTimeSettingsPage extends MobileAbstractPage {
                     }
                     if (!multiTimezoneText) {
                         LOGGER.info("Searching for " + timezone);
-                        scrolled = MobileUtils.swipeInContainerTillElement(
+                        scrolled = MobileUtils.swipe(
                                 format(tzSelectionBase, timezone),
                                 scrollableContainer, defaultSwipeTime);
                         if (scrolled) {
@@ -107,7 +122,7 @@ public class DateTimeSettingsPage extends MobileAbstractPage {
                             selected = true;
                         } else {
                             LOGGER.error("Did not find timezone by timezone text: " + timezone);
-                            scrolled = MobileUtils.swipeInContainerTillElement(
+                            scrolled = MobileUtils.swipe(
                                     format(tzSelectionBase, tz),
                                     scrollableContainer, defaultSwipeTime);
                             if (scrolled) {
@@ -171,7 +186,7 @@ public class DateTimeSettingsPage extends MobileAbstractPage {
      * @return boolean
      */
     private boolean selectTimezoneByText(String timezone, int defaultSwipeTime) {
-        boolean scrolled = MobileUtils.swipeInContainerTillElement(
+        boolean scrolled = MobileUtils.swipe(
                 format(tzSelectionBase, timezone),
                 scrollableContainer, defaultSwipeTime);
         if (scrolled) {

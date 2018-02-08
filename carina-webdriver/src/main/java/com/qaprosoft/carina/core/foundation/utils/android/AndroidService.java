@@ -1,3 +1,18 @@
+/*******************************************************************************
+ * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.utils.android;
 
 import static com.qaprosoft.carina.core.foundation.webdriver.DriverPool.getDriver;
@@ -22,6 +37,7 @@ import com.qaprosoft.carina.core.foundation.utils.R;
 import com.qaprosoft.carina.core.foundation.utils.android.DeviceTimeZone.TimeFormat;
 import com.qaprosoft.carina.core.foundation.utils.android.recorder.utils.AdbExecutor;
 import com.qaprosoft.carina.core.foundation.utils.android.recorder.utils.CmdLine;
+import com.qaprosoft.carina.core.foundation.utils.common.CommonUtils;
 import com.qaprosoft.carina.core.foundation.utils.factory.DeviceType;
 import com.qaprosoft.carina.core.foundation.utils.mobile.notifications.android.Notification;
 import com.qaprosoft.carina.core.foundation.webdriver.DriverPool;
@@ -392,7 +408,7 @@ public class AndroidService {
         int actual = notificationsCount();
         while (actual <= base && ++time < timeout && !foundText) {
             LOGGER.info("Wait for notification. Second: " + time + ". Actual number:" + actual);
-            pause(1);
+            CommonUtils.pause(1);
             actual = notificationsCount();
             foundText = isNotificationWithTextExist(text);
         }
@@ -436,7 +452,7 @@ public class AndroidService {
         int actual = notificationsCount();
         while (actual <= base && ++time < timeout && !foundText) {
             LOGGER.info("Wait for notification. Second: " + time + ". Actual number:" + actual);
-            pause(1);
+            CommonUtils.pause(1);
             actual = notificationsCount();
             foundText = isNotificationPkgExist(pkg);
         }
@@ -468,7 +484,7 @@ public class AndroidService {
         // open notification
         try {
             ((AndroidDriver) getDriver()).openNotifications();
-            pause(2); // wait while notifications are playing animation to
+            CommonUtils.pause(2); // wait while notifications are playing animation to
                       // appear to avoid missed taps
         } catch (Exception e) {
             LOGGER.error(e);
@@ -605,10 +621,18 @@ public class AndroidService {
     public boolean setDeviceLanguage(String language, boolean changeConfig, int waitTime) {
         boolean status = false;
 
-        language = language.toLowerCase();
+        String initLanguage = language;
 
-        if (getDeviceLanguage().toLowerCase().contains(language)) {
-            LOGGER.info("Device already have expected language.");
+        String currentAndroidVersion = DevicePool.getDevice().getOsVersion();
+
+        LOGGER.info("Do not concat language for Android. Keep: " + language);
+        language=language.replace("_","-");
+        LOGGER.info("Refactor language to : " + language);
+
+        String actualDeviceLanguage = getDeviceLanguage();
+
+        if (language.contains(actualDeviceLanguage.toLowerCase()) || actualDeviceLanguage.toLowerCase().contains(language)) {
+            LOGGER.info("Device already have expected language: " + actualDeviceLanguage);
             return true;
         }
 
@@ -633,32 +657,34 @@ public class AndroidService {
 
         if (waitTime > 0) {
             LOGGER.info("Wait for at least '" + waitTime + "' seconds before device refresh.");
-            pause(waitTime);
+            CommonUtils.pause(waitTime);
         }
 
         if (changeConfig) {
             String loc;
             String lang;
-            if (language.contains("_")) {
-                lang = language.split("_")[0];
-                loc = language.split("_")[1];
+            if (initLanguage.contains("_")) {
+                lang = initLanguage.split("_")[0];
+                loc = initLanguage.split("_")[1];
             } else {
-                lang = language;
-                loc = language;
+                lang = initLanguage;
+                loc = initLanguage;
             }
             LOGGER.info("Update config.properties locale to '" + loc + "' and language to '" + lang + "'.");
             R.CONFIG.put("locale", loc);
             R.CONFIG.put("language", lang);
         }
 
-        if (getDeviceLanguage().toLowerCase().contains(language)) {
+        actualDeviceLanguage = getDeviceLanguage();
+        LOGGER.info("Actual Device Language: " + actualDeviceLanguage);
+        if (language.contains(actualDeviceLanguage.toLowerCase()) || actualDeviceLanguage.toLowerCase().contains(language)) {
             status = true;
         } else {
             if (getDeviceLanguage().isEmpty()) {
                 LOGGER.info("Adb return empty response without errors.");
                 status = true;
             } else {
-                String currentAndroidVersion = DevicePool.getDevice().getOsVersion();
+                currentAndroidVersion = DevicePool.getDevice().getOsVersion();
                 LOGGER.info("currentAndroidVersion=" + currentAndroidVersion);
                 if (currentAndroidVersion.contains("7.")) {
                     LOGGER.info("Adb return language command do not work on some Android 7+ devices." + " Check that there are no error.");
@@ -675,7 +701,11 @@ public class AndroidService {
      * @return String
      */
     public String getDeviceLanguage() {
-        return executeAdbCommand("shell getprop persist.sys.language");
+        String locale = executeAdbCommand("shell getprop persist.sys.language");
+        if(locale.isEmpty()) {
+            locale = executeAdbCommand("shell getprop persist.sys.locale");
+        }
+        return locale;
     }
     // End Language Change section
 
@@ -712,7 +742,7 @@ public class AndroidService {
             if (!fakeGpsPage.isOpened(1)) {
                 LOGGER.error("Fake GPS application should be open but wasn't. Force opening.");
                 openApp(activity);
-                pause(2);
+                CommonUtils.pause(2);
             }
             res = fakeGpsPage.locationSearch(location);
             if (res) {
@@ -756,7 +786,7 @@ public class AndroidService {
             if (!fakeGpsPage.isOpened(1)) {
                 LOGGER.error("Fake GPS application should be open but wasn't. Force opening.");
                 openApp(activity);
-                pause(2);
+                CommonUtils.pause(2);
             }
             LOGGER.info("STOP Fake GPS locale");
             res = fakeGpsPage.clickStopFakeGps();
@@ -795,7 +825,7 @@ public class AndroidService {
         while (!isApkOpened && attemps > 0) {
             LOGGER.info("Apk was not open. Attempt to open...");
             openApp(activity);
-            pause(2);
+            CommonUtils.pause(2);
             isApkOpened = checkCurrentDeviceFocus(packageName);
             attemps--;
         }
@@ -804,7 +834,7 @@ public class AndroidService {
             LOGGER.info("Probably APK was not installed correctly. Try to reinstall.");
             installApk(apkPath, true);
             openApp(activity);
-            pause(2);
+            CommonUtils.pause(2);
         }
 
         if (checkCurrentDeviceFocus(packageName)) {
@@ -967,7 +997,7 @@ public class AndroidService {
 
         String currentAndroidVersion = DevicePool.getDevice().getOsVersion();
         LOGGER.info("currentAndroidVersion=" + currentAndroidVersion);
-        if (currentAndroidVersion.contains("7.") || (DevicePool.getDevice().getType() == DeviceType.Type.ANDROID_TABLET)) {
+        if (currentAndroidVersion.contains("7.") || (DevicePool.getDevice().getDeviceType() == DeviceType.Type.ANDROID_TABLET)) {
             LOGGER.info("TimeZone changing for Android 7+ and tablets works only by TimeZone changer apk.");
             workflow = ChangeTimeZoneWorkflow.APK;
         }
@@ -1287,7 +1317,7 @@ public class AndroidService {
         setSystemTime(timeFormat);
 
         openApp(TZ_CHANGE_APP_ACTIVITY);
-        pause(2);
+        CommonUtils.pause(2);
     }
 
     private void setSystemTime(TimeFormat timeFormat) {
@@ -1343,18 +1373,5 @@ public class AndroidService {
     }
 
     // End of TimeZone private section
-
-    /**
-     * Pause
-     *
-     * @param timeout long
-     */
-    private void pause(long timeout) {
-        try {
-            Thread.sleep(timeout * 1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-    }
 
 }

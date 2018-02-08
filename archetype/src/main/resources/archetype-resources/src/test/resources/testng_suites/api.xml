@@ -6,7 +6,7 @@
 <suite verbose="1" name="Carina Demo Tests - API sample tests" skipfailedinvocationcounts="false" junit="false" parallel="tests" data-provider-thread-count="50" annotations="JDK">
 
 	<parameter name="suiteOwner" value="demo" />
-	<parameter name="zafira_project" value="unknown" />
+	<parameter name="zafira_project" value="UNKNOWN" />
 	<parameter name="jenkinsJobCreation" value="true" />
 	<parameter name="jenkinsJobFolder" value="DEMO" />
 	<parameter name="jenkinsJobName" value="API-Demo-Test" />
@@ -15,6 +15,7 @@
 
 	<listeners>
 		<listener class-name="com.qaprosoft.carina.core.foundation.retry.AnnotationTransformer" />
+		<listener class-name="com.qaprosoft.zafira.listener.ZafiraListener"/>
 	</listeners>
 
 	<test name="User API tests">

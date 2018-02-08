@@ -1,27 +1,24 @@
-/*
- * Copyright 2013-2015 QAPROSOFT (http://qaprosoft.com/).
+/*******************************************************************************
+ * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+ *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.utils;
 
-import java.io.IOException;
 import java.lang.reflect.Constructor;
-import java.net.URL;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Properties;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
@@ -103,6 +100,8 @@ public class Configuration
 		
 		DRIVER_MODE("driver_mode"),
 		
+		DRIVER_EVENT_LISTENERS("driver_event_listeners"),
+		
 		MAX_DRIVER_COUNT("max_driver_count"),
 		
 		CUSTOM_CAPABILITIES("custom_capabilities"),
@@ -172,7 +171,9 @@ public class Configuration
 		RETRY_COUNT("retry_count"),
 
 		ENABLE_L10N("enable_l10n"),
-		
+
+		L10N_ENCODING("l10n_encoding"),
+
 		LOCALE("locale"),
 		
 		ENABLE_I18N("enable_i18n"),
@@ -216,18 +217,6 @@ public class Configuration
         JIRA_CREATE_NEW_TICKET("jira_create_new_ticket"),
         
         // Appium 1.1.x mobile capabilities: iOS and Android
-        MOBILE_APP_PREUPGRADE("mobile_app_preupgrade"),
-        
-        MOBILE_APP_UNINSTALL("mobile_app_uninstall"),
-        
-        MOBILE_APP_INSTALL("mobile_app_install"),
-        
-        MOBILE_APP_CLEAR_CACHE("mobile_app_clear_cache"),
-        
-        MOBILE_APPIUM_RESTART("mobile_appium_restart"),
-        
-		MOBILE_TOOLS_HOME("mobile_tools_home"),
-		
 		MOBILE_SCREEN_SWITCHER("mobile_screen_switcher"),
 		
 		//DROPBOX_ACCESS_TOKEN("dropbox_access_token"), 
@@ -268,8 +257,10 @@ public class Configuration
 		HOCKEYAPP_LOCAL_STORAGE("hockeyapp_local_storage"),
 		
 		//For localization parser
-		ADD_NEW_LOCALIZATION("add_new_localization"), 
-		
+		ADD_NEW_LOCALIZATION("add_new_localization"),
+
+		ADD_NEW_LOCALIZATION_ENCODING("add_new_localization_encoding"),
+
 		ADD_NEW_LOCALIZATION_PATH("add_new_localization_path"),
 		
 		ADD_NEW_LOCALIZATION_PROPERTY_NAME("add_new_localization_property_name"),
@@ -293,7 +284,9 @@ public class Configuration
 		//HealthCheck
 		HEALTH_CHECK_CLASS("health_check_class"),
 		
-		HEALTH_CHECK_METHODS("health_check_methods")
+		HEALTH_CHECK_METHODS("health_check_methods"),
+		
+		UNINSTALL_RELATED_APPS("uninstall_related_apps")
 		;
 
 		private final String key;
@@ -424,45 +417,6 @@ public class Configuration
 		return get(param).isEmpty(); 
 	}
 	
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    public static Map<String, String> loadCoreProperties(String fileName) {
-
-        LOGGER.info("Loading capabilities:");
-        Properties props = new Properties();
-        URL baseResource = ClassLoader.getSystemResource(fileName);
-		try {
-			if(baseResource != null)
-			{
-				props.load(baseResource.openStream());
-				LOGGER.info("Custom capabilities properties loaded: " + fileName);
-			} else {
-				throw new RuntimeException("Unable to find custom capabilities file '" + fileName + "'!");	
-			}
-		} catch (IOException e) {
-			throw new RuntimeException("Unable to load custom capabilities from '" + baseResource.getPath() + "'!", e);
-		}
-
-        Map<String, String> propertiesMap = new HashMap(props);
-        for (Map.Entry<String, String> entry : propertiesMap.entrySet()) {
-            if (entry.getKey().startsWith(SpecialKeywords.CORE)) {
-            	
-                String valueFromEnv = null;
-                if (!entry.getKey().equalsIgnoreCase("os")) {
-                	valueFromEnv = System.getenv(entry.getKey());
-                } else {
-                	LOGGER.warn("'os' property can't be loaded from environment as it is default system variable!");
-                }
-                String value = (valueFromEnv != null) ? valueFromEnv : entry.getValue();
-                
-            	String key = entry.getKey().replaceAll(SpecialKeywords.CORE + ".", "");
-            	LOGGER.info("Set custom core property: " + key + "; value: " + value);
-            	R.CONFIG.put(key, value);
-            }
-        }
-        
-        return propertiesMap;
-    }
-    
     public static String getPlatform() {
     	// default "platform=value" should be used to determine current platform 
     	String platform = Configuration.get(Parameter.PLATFORM);
@@ -482,12 +436,13 @@ public class Configuration
     
     
 	public static String getDriverType() {
+
 		String platform = getPlatform();
-		String mobileType = SpecialKeywords.DESKTOP;
 		if (platform.equalsIgnoreCase(SpecialKeywords.ANDROID) || platform.equalsIgnoreCase(SpecialKeywords.IOS)) {
-			mobileType = SpecialKeywords.MOBILE;
+			return SpecialKeywords.MOBILE;
 		}
-		return mobileType;
+		
+		return SpecialKeywords.DESKTOP;
 	}
     
     

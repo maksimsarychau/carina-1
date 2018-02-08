@@ -17,29 +17,6 @@
     <suite>api</suite>
   </properties>
 
-  <repositories>
-    <repository>
-      <id>qaprosoft_releases</id>
-      <name>Qaprosoft Releases</name>
-      <url>http://ci.qaprosoft.com:8081/nexus/content/repositories/releases/</url>
-      <releases>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>qaprosoft_snapshots</id>
-      <name>Qaprosoft Snapshots</name>
-      <url>http://ci.qaprosoft.com:8081/nexus/content/repositories/snapshots/</url>
-      <releases>
-        <enabled>false</enabled>
-      </releases>
-      <snapshots>
-      </snapshots>
-    </repository>
-  </repositories>
-
   <dependencies>
     <dependency>
       <groupId>com.qaprosoft</groupId>
@@ -73,10 +50,10 @@
             <suiteXmlFile>${project.build.directory}/test-classes/testng_suites/${suite}.xml</suiteXmlFile>
           </suiteXmlFiles>
           <properties>
-            <property>
+            <!--property>
               <name>listener</name>
               <value>com.qaprosoft.carina.core.foundation.listeners.HealthCheckListener,com.qaprosoft.zafira.listener.ZafiraListener</value>
-            </property>
+            </property-->
           </properties>
         </configuration>
       </plugin>

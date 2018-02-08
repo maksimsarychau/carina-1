@@ -67,6 +67,11 @@
 		</dependency>
 
 		<dependency>
+			<groupId>com.sun.jna</groupId>
+			<artifactId>jna</artifactId>
+		</dependency>
+
+		<dependency>
 		    <groupId>com.jayway.restassured</groupId>
 		    <artifactId>rest-assured</artifactId>
 		</dependency>
@@ -108,7 +113,11 @@
 			<artifactId>jira-client</artifactId>
 			<version>${jira-client.version}</version>
 		</dependency>
-
+		
+		<dependency>
+			<groupId>org.imgscalr</groupId>
+			<artifactId>imgscalr-lib</artifactId>
+		</dependency>
 	</dependencies>
 
 	<build>

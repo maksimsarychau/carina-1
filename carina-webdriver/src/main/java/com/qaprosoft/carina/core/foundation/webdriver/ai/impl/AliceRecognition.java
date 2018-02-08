@@ -1,18 +1,18 @@
-/*
- * Copyright 2013-2017 QAPROSOFT (http://qaprosoft.com/).
+/*******************************************************************************
+ * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+ *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.webdriver.ai.impl;
 
 import java.io.File;
@@ -50,6 +50,7 @@ public class AliceRecognition implements IRecognition
 	private static final String ALICE_ENABLED = "alice_enabled";
 	private static final String ALICE_SERVICE_URL = "alice_service_url";
 	private static final String ALICE_ACCESS_TOKEN = "alice_access_token";
+	private static final String ALICE_COMMAND = "alice_command";
 	
 	private boolean enabled = false;
 	
@@ -67,10 +68,11 @@ public class AliceRecognition implements IRecognition
 			this.enabled = config.getBoolean(ALICE_ENABLED, false);
 			String url = config.getString(ALICE_SERVICE_URL, null); 
 			String accessToken = config.getString(ALICE_ACCESS_TOKEN, null); 
+			String command = config.getString(ALICE_COMMAND, null); 
 		
 			if(enabled && !StringUtils.isEmpty(url) && !StringUtils.isEmpty(accessToken))
 			{
-				this.client = new AliceClient(url);
+				this.client = new AliceClient(url, command);
 				this.client.setAuthToken(accessToken);
 				this.enabled = this.client.isAvailable();
 			}

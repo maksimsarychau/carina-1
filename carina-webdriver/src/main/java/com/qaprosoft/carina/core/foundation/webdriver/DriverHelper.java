@@ -1,18 +1,18 @@
-/*
- * Copyright 2013-2015 QAPROSOFT (http://qaprosoft.com/).
+/*******************************************************************************
+ * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+ *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.webdriver;
 
 import java.util.ArrayList;
@@ -33,8 +33,8 @@ import org.openqa.selenium.NoSuchWindowException;
 import org.openqa.selenium.StaleElementReferenceException;
 import org.openqa.selenium.UnhandledAlertException;
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.WebElement;
-import org.openqa.selenium.htmlunit.HtmlUnitDriver;
 import org.openqa.selenium.interactions.Action;
 import org.openqa.selenium.interactions.Actions;
 import org.openqa.selenium.support.ui.Wait;
@@ -46,6 +46,7 @@ import com.qaprosoft.carina.core.foundation.utils.Configuration;
 import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
 import com.qaprosoft.carina.core.foundation.utils.LogicUtils;
 import com.qaprosoft.carina.core.foundation.utils.Messager;
+import com.qaprosoft.carina.core.foundation.utils.common.CommonUtils;
 import com.qaprosoft.carina.core.foundation.webdriver.decorator.ExtendedWebElement;
 import com.qaprosoft.carina.core.foundation.webdriver.device.DevicePool;
 import com.qaprosoft.carina.core.gui.AbstractPage;
@@ -117,7 +118,7 @@ public class DriverHelper {
 			getDriver().manage().timeouts().implicitlyWait(timeout, TimeUnit.SECONDS);
 		} catch (Exception e) {
 			LOGGER.error("Unable to set implicit timeout to " + timeout, e);
-			getDriver().manage().timeouts().implicitlyWait(timeout, TimeUnit.SECONDS);
+			//getDriver().manage().timeouts().implicitlyWait(timeout, TimeUnit.SECONDS);
 		}
 	}
 
@@ -351,16 +352,19 @@ public class DriverHelper {
 	@Deprecated
 	public boolean isElementPresent(String elementName, final By by, long timeout) {
 		boolean result;
-		setImplicitTimeout(1);
+		
 		final WebDriver drv = getDriver();
 		wait = new WebDriverWait(drv, timeout, RETRY_TIME);
 		try {
+			setImplicitTimeout(0);
 			wait.until((Function<WebDriver, Object>) dr -> !dr.findElements(by).isEmpty() && dr.findElement(by).isDisplayed());
 			result = true;
 		} catch (Exception e) {
 			result = false;
+		} finally {
+			setImplicitTimeout(IMPLICIT_TIMEOUT);	
 		}
-		setImplicitTimeout(IMPLICIT_TIMEOUT);
+		
 		return result;
 	}
 
@@ -718,6 +722,8 @@ public class DriverHelper {
 		// stability issues
 		try {
 			drv.manage().window().maximize();
+		} catch (WebDriverException e) {
+			LOGGER.debug(e.getMessage(), e);
 		} catch (Exception e) {
 			LOGGER.error(e.getMessage(), e);
 		}
@@ -754,21 +760,11 @@ public class DriverHelper {
 	 */
 
 	public void pause(long timeout) {
-		try {
-			Thread.sleep(timeout * 1000);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
+		CommonUtils.pause(timeout);
 	}
 
 	public void pause(Double timeout) {
-		try {
-			timeout = timeout * 1000;
-			long miliSec = timeout.longValue();
-			Thread.sleep(miliSec);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
+		CommonUtils.pause(timeout);
 	}
 
 	/**
@@ -841,7 +837,7 @@ public class DriverHelper {
 	 *            before refresh.
 	 */
 	public void refresh(long timeout) {
-		pause(timeout);
+		CommonUtils.pause(timeout);
 		refresh();
 	}
 
@@ -1035,11 +1031,11 @@ public class DriverHelper {
 	 */
 	public void silentAlert() {
 		WebDriver drv = getDriver();
-		if (!(drv instanceof HtmlUnitDriver)) {
-			((JavascriptExecutor) drv).executeScript("window.alert = function(msg) { return true; }");
-			((JavascriptExecutor) drv).executeScript("window.confirm = function(msg) { return true; }");
-			((JavascriptExecutor) drv).executeScript("window.prompt = function(msg) { return true; }");
-		}
+
+		((JavascriptExecutor) drv).executeScript("window.alert = function(msg) { return true; }");
+		((JavascriptExecutor) drv).executeScript("window.confirm = function(msg) { return true; }");
+		((JavascriptExecutor) drv).executeScript("window.prompt = function(msg) { return true; }");
+
 	}
 
 	/**
@@ -1351,19 +1347,21 @@ public class DriverHelper {
 	public ExtendedWebElement findExtendedWebElement(final By by, String name, long timeout) {
 		ExtendedWebElement element;
 		final WebDriver drv = getDriver();
-		setImplicitTimeout(0);
+		
 		wait = new WebDriverWait(drv, timeout, RETRY_TIME);
 		try {
+			setImplicitTimeout(0);
 			wait.until((Function<WebDriver, Object>) dr -> !drv.findElements(by).isEmpty());
 			element = new ExtendedWebElement(driver.findElement(by), name, by, driver);
 			Messager.ELEMENT_FOUND.info(name);
 		} catch (Exception e) {
 			element = null;
 			Messager.ELEMENT_NOT_FOUND.error(name);
-			setImplicitTimeout(IMPLICIT_TIMEOUT);
 			throw new RuntimeException(e);
+		} finally {
+			setImplicitTimeout(IMPLICIT_TIMEOUT);	
 		}
-		setImplicitTimeout(IMPLICIT_TIMEOUT);
+		
 		return element;
 	}
 
@@ -1375,10 +1373,10 @@ public class DriverHelper {
 		List<ExtendedWebElement> extendedWebElements = new ArrayList<ExtendedWebElement>();
 		List<WebElement> webElements = new ArrayList<WebElement>();
 
-		setImplicitTimeout(1);
 		final WebDriver drv = getDriver();
 		wait = new WebDriverWait(drv, timeout, RETRY_TIME);
 		try {
+			setImplicitTimeout(0);
 			wait.until(new Function<WebDriver, Object>() {
 				public Boolean apply(WebDriver dr) {
 					return !drv.findElements(by).isEmpty();
@@ -1387,6 +1385,8 @@ public class DriverHelper {
 			webElements = driver.findElements(by);
 		} catch (Exception e) {
 			// do nothing
+		} finally {
+			setImplicitTimeout(IMPLICIT_TIMEOUT);
 		}
 
 		for (WebElement element : webElements) {
@@ -1398,7 +1398,6 @@ public class DriverHelper {
 
 			extendedWebElements.add(new ExtendedWebElement(element, name, drv));
 		}
-		setImplicitTimeout(IMPLICIT_TIMEOUT);
 		return extendedWebElements;
 	}
 
@@ -1407,16 +1406,15 @@ public class DriverHelper {
 	}
 
 	protected WebDriver getDriver() {
-		if (driver != null && !driver.toString().contains("null")) {
+		if (DriverPool.isValid(driver)) {
 			return driver;
 		}
+		
 		LOGGER.info("Unable to find driver in DriverHelper without DriverPool!");
 		
-		long currentThreadId = Thread.currentThread().getId();
-		if (driver == null || driver.toString().contains("null")) {
-			driver = DriverPool.getDriver();
-		}
+		driver = DriverPool.getDriver();
 		if (driver == null) {
+			long currentThreadId = Thread.currentThread().getId();
 			LOGGER.error("There is no any initialized driver for thread: " + currentThreadId);
 			throw new RuntimeException("Driver isn't initialized.");
 		}

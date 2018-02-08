@@ -1,18 +1,18 @@
-/*
- * Copyright 2013-2017 QAPROSOFT (http://qaprosoft.com/).
+/*******************************************************************************
+ * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
- */
+ *******************************************************************************/
 package com.qaprosoft.carina.grid.servlets;
 
 import java.io.IOException;
@@ -29,13 +29,14 @@ import org.openqa.grid.internal.TestSession;
 import org.openqa.grid.web.servlet.RegistryBasedServlet;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.qaprosoft.carina.commons.models.RemoteDevice;
 import com.qaprosoft.carina.grid.integration.STF;
 import com.qaprosoft.zafira.models.stf.STFDevice;
 
 /**
  * Servlet that retrieves information about STF device.
  * 
- * @author akhursevich
+ * @author Alex Khursevich (alex@qaprosoft.com)
  */
 public class DeviceInfo extends RegistryBasedServlet
 {
@@ -79,17 +80,22 @@ public class DeviceInfo extends RegistryBasedServlet
 				Map<String, Object> cap = session.getSlot().getCapabilities();
 				if(cap.containsKey("udid"))
 				{
-					STFDevice device = STF.getDevice((String) cap.get("udid"));
-					if(device != null)
+					RemoteDevice device = new RemoteDevice(); 
+					device.setName((String) cap.get("deviceName"));
+					device.setOs((String) cap.get("platformName"));
+					device.setOsVersion((String) cap.get("platformVersion"));
+					device.setType((String) cap.get("deviceType"));
+					device.setUdid((String) cap.get("udid"));
+					
+					STFDevice stfDevice = STF.getDevice(device.getUdid());
+					if(stfDevice != null)
 					{
-						if(session.getSlot().getCapabilities().containsKey("deviceType"))
-						{
-							device.setDeviceType((String)session.getSlot().getCapabilities().get("deviceType"));
-						}
-						response.setStatus(HttpStatus.SC_OK);
-						response.getWriter().print(new ObjectMapper().writeValueAsString(device));
-					    response.getWriter().close();
+						device.setRemoteURL((String) stfDevice.getRemoteConnectUrl());
 					}
+					
+					response.setStatus(HttpStatus.SC_OK);
+					response.getWriter().print(new ObjectMapper().writeValueAsString(device));
+				    response.getWriter().close();
 				}
 			}
 		}
