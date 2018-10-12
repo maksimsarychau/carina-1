@@ -18,6 +18,7 @@ package com.qaprosoft.carina.core.foundation.utils.android;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 import org.openqa.selenium.By;
 import org.openqa.selenium.Dimension;
@@ -30,15 +31,17 @@ import org.openqa.selenium.support.ui.ExpectedConditions;
 import org.openqa.selenium.support.ui.WebDriverWait;
 
 import com.qaprosoft.carina.core.foundation.utils.mobile.MobileUtils;
-import com.qaprosoft.carina.core.foundation.webdriver.DriverPool;
 import com.qaprosoft.carina.core.foundation.webdriver.decorator.ExtendedWebElement;
 
 import io.appium.java_client.MobileBy;
-import io.appium.java_client.MobileDriver;
-import io.appium.java_client.PressesKeyCode;
 import io.appium.java_client.TouchAction;
 import io.appium.java_client.android.AndroidDriver;
 import io.appium.java_client.android.AndroidKeyCode;
+import io.appium.java_client.android.nativekey.AndroidKey;
+import io.appium.java_client.android.nativekey.KeyEvent;
+import io.appium.java_client.android.nativekey.KeyEventFlag;
+import io.appium.java_client.touch.offset.PointOption;
+import io.appium.java_client.windows.PressesKeyCode;
 
 /**
  * Useful Android utilities. For usage: import
@@ -47,6 +50,7 @@ import io.appium.java_client.android.AndroidKeyCode;
  */
 public class AndroidUtils extends MobileUtils {
 
+	//TODO: review carefully and remove duplicates and migrate completely to fluent waits
     protected static final Logger LOGGER = Logger.getLogger(AndroidUtils.class);
     private static final int SCROLL_MAX_SEARCH_SWIPES = 55;
     private static final long SCROLL_TIMEOUT = 300;
@@ -58,7 +62,7 @@ public class AndroidUtils extends MobileUtils {
      * @param keyCode int
      */
     public static void executeKeyEvent(int keyCode) {
-        WebDriver driver = DriverPool.getDriver();
+        WebDriver driver = getDriver();
         LOGGER.info("Execute key event: " + keyCode);
         HashMap<String, Integer> keyCodeMap = new HashMap<String, Integer>();
         keyCodeMap.put("keycode", keyCode);
@@ -75,7 +79,7 @@ public class AndroidUtils extends MobileUtils {
     public static boolean pressKeyCode(int keyCode) {
         try {
             LOGGER.info("Press key code: " + keyCode);
-            ((PressesKeyCode) DriverPool.getDriver()).pressKeyCode(keyCode);
+            ((PressesKeyCode) getDriver()).pressKeyCode(keyCode);
             return true;
         } catch (Exception e) {
             LOGGER.error("Exception during pressKeyCode:", e);
@@ -87,6 +91,11 @@ public class AndroidUtils extends MobileUtils {
             }
         }
         return false;
+    }
+    
+    public static void pressKeyboardKey(AndroidKey key) {
+        ((AndroidDriver<?>) getDriver()).pressKey(new KeyEvent(key)
+                .withFlag(KeyEventFlag.SOFT_KEYBOARD).withFlag(KeyEventFlag.KEEP_TOUCH_MODE).withFlag(KeyEventFlag.EDITOR_ACTION));
     }
 
     /**
@@ -106,7 +115,7 @@ public class AndroidUtils extends MobileUtils {
         double directMultY1 = 0.5;
         double directMultY2 = 0.5;
 
-        WebDriver driver = DriverPool.getDriver();
+        WebDriver driver = getDriver();
 
         if (direction.equals(Direction.RIGHT)) {
             directMultX1 = 0.2;
@@ -140,10 +149,15 @@ public class AndroidUtils extends MobileUtils {
 
         int x = elem.getElement().getLocation().getX();
         int y = elem.getElement().getLocation().getY();
-        int width = elem.getElement().getSize().getWidth();
-        int height = elem.getElement().getSize().getHeight();
-        int screen_size_x = driver.manage().window().getSize().getWidth();
-        int screen_size_y = driver.manage().window().getSize().getHeight();
+        
+        Dimension size = helper.performIgnoreException(() -> elem.getElement().getSize());
+        int width = size.getWidth();
+        int height = size.getHeight();
+        
+        
+        size = helper.performIgnoreException(() -> driver.manage().window().getSize());
+        int screen_size_x = size.getWidth();
+        int screen_size_y = size.getHeight();
 
         LOGGER.debug("x=" + x + ", y=" + y + ", width=" + width + ", height=" + height + ", screen width=" + screen_size_x + ", screen height="
                 + screen_size_y);
@@ -163,19 +177,18 @@ public class AndroidUtils extends MobileUtils {
             }
         }
     }
+
     /**
      * Hide keyboard if needed
      */
+    @Deprecated
     public static void hideKeyboard() {
-        try {
-        	((MobileDriver<?>) DriverPool.getDriver()).hideKeyboard();
-        } catch (Exception e) {
-            LOGGER.info("Keyboard was already hided or error occurs: " + e);
-        }
+        MobileUtils.hideKeyboard();
     }
     
-    public static void pressBack() {
-        ((AndroidDriver<?>) DriverPool.getDriver()).pressKeyCode(AndroidKeyCode.BACK);
+    @SuppressWarnings("deprecation")
+	public static void pressBack() {
+        ((AndroidDriver<?>) getDriver()).pressKeyCode(AndroidKeyCode.BACK);
     }
 
     /**
@@ -202,13 +215,15 @@ public class AndroidUtils extends MobileUtils {
      * Nexus 6P Android 8.0.0 standard keyboard. Coefficients of coordinates for
      * other devices and custom keyboards could be different.
      */
-    public static void pressBottomRightKey() {
-    	WebDriver driver = DriverPool.getDriver();
-    	Dimension size = driver.manage().window().getSize();
+    @SuppressWarnings("rawtypes")
+	public static void pressBottomRightKey() {
+    	WebDriver driver = getDriver();
+    	Dimension size = helper.performIgnoreException(() -> driver.manage().window().getSize());
         int height =  size.getHeight();
         int width = size.getWidth();
 
-        new TouchAction((AndroidDriver<?>) driver).tap(Double.valueOf(width * 0.915).intValue(), Double.valueOf(height * 0.945).intValue()).perform();
+		PointOption<?> option = PointOption.point(Double.valueOf(width * 0.915).intValue(), Double.valueOf(height * 0.945).intValue());
+        new TouchAction((AndroidDriver<?>) driver).tap(option).perform();
     }
 
     /**
@@ -218,10 +233,10 @@ public class AndroidUtils extends MobileUtils {
      * @param timeout long
      * @param pollingTime long
      */
+    @Deprecated
     public static void waitUntilElementNotPresent(final By locator, final long timeout, final long pollingTime) {
         LOGGER.info(String.format("Wait until element %s disappear", locator.toString()));
-        WebDriver driver = DriverPool.getDriver();
-        driver.manage().timeouts().implicitlyWait(1, TimeUnit.SECONDS);
+        WebDriver driver = getDriver();
         try {
             if (new WebDriverWait(driver, timeout, pollingTime).until(ExpectedConditions.invisibilityOfElementLocated(locator))) {
                 LOGGER.info(String.format("Element located by: %s not present.", locator.toString()));
@@ -232,9 +247,8 @@ public class AndroidUtils extends MobileUtils {
             LOGGER.debug(e.getMessage());
             LOGGER.info(String.format("Element located by: %s is still present.", locator.toString()));
         }
-        driver.manage().timeouts().implicitlyWait(IMPLICIT_TIMEOUT, TimeUnit.SECONDS);
     }
-
+    
     /**
      * change Android Device Language
      * <p>
@@ -269,6 +283,7 @@ public class AndroidUtils extends MobileUtils {
     }
     
     public static boolean isChecked(final ExtendedWebElement element) {
+    	//TODO: SZ migrate to FluentWaits
 		return element.isElementPresent(5)
 				&& (element.getElement().isSelected() || element.getAttribute("checked").equals("true"));
     }
@@ -307,20 +322,32 @@ public class AndroidUtils extends MobileUtils {
      **/
     public static ExtendedWebElement scroll(String scrollToEle, ExtendedWebElement scrollableContainer, SelectorType containerSelectorType,
                           int containerInstance, SelectorType eleSelectorType) {
-        ExtendedWebElement el = null;
+        ExtendedWebElement extendedWebElement = null;
         long startTime = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis());
+		// TODO: support multi threaded WebDriver's removing DriverPool usage
+		WebDriver drv = getDriver();
+
+        //workaorund for appium issue: https://github.com/appium/appium/issues/10159
+        if (scrollToEle.contains(",")) {
+            scrollToEle = StringUtils.join(StringUtils.split(scrollToEle, ","),
+                    ",", 0, 2);
+            if (eleSelectorType.equals(SelectorType.TEXT)) {
+                eleSelectorType = SelectorType.TEXT_CONTAINS;
+            }
+        }
 
         for (int i = 0; i < SCROLL_MAX_SEARCH_SWIPES; i++) {
 
             try {
-                WebElement ele = DriverPool.getDriver().findElement(MobileBy.AndroidUIAutomator("new UiScrollable(" +
-                        getScrollContainerSelector(scrollableContainer, containerSelectorType) +
-                        ".instance(" + containerInstance + "))"+
-                        ".setMaxSearchSwipes(" + SCROLL_MAX_SEARCH_SWIPES + ")" + ".scrollIntoView(" +
-                        getScrollToElementSelector(scrollToEle, eleSelectorType) + ")"));
+				By scrollBy = MobileBy.AndroidUIAutomator("new UiScrollable("
+						+ getScrollContainerSelector(scrollableContainer, containerSelectorType) + ".instance("
+						+ containerInstance + "))" + ".setMaxSearchSwipes(" + SCROLL_MAX_SEARCH_SWIPES + ")"
+						+ ".scrollIntoView(" + getScrollToElementSelector(scrollToEle, eleSelectorType) + ")");
+                
+				WebElement ele = drv.findElement(scrollBy);
                 if (ele.isDisplayed()) {
                     LOGGER.info("Element found!!!");
-                    el = new ExtendedWebElement(ele, scrollToEle, DriverPool.getDriver());
+                    extendedWebElement = new ExtendedWebElement(scrollBy, scrollToEle, drv);
                     break;
                 }
             } catch (NoSuchElementException noSuchElement) {
@@ -336,7 +363,7 @@ public class AndroidUtils extends MobileUtils {
             }
         }
 
-        return el;
+        return extendedWebElement;
     }
 
     /** Scrolls into view in specified container
@@ -356,20 +383,33 @@ public class AndroidUtils extends MobileUtils {
      **/
     public static ExtendedWebElement scroll(String scrollToEle, ExtendedWebElement scrollableContainer, SelectorType containerSelectorType,
                           int containerInstance, SelectorType eleSelectorType, int eleSelectorInstance) {
-        ExtendedWebElement el = null;
+        ExtendedWebElement extendedWebElement = null;
         long startTime = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis());
+		// TODO: support multi threaded WebDriver's removing DriverPool usage
+		WebDriver drv = getDriver();
+
+        //workaorund for appium issue: https://github.com/appium/appium/issues/10159
+        if (scrollToEle.contains(",")) {
+            scrollToEle = StringUtils.join(StringUtils.split(scrollToEle, ","),
+                    ",", 0, 2);
+            if (eleSelectorType.equals(SelectorType.TEXT)) {
+                eleSelectorType = SelectorType.TEXT_CONTAINS;
+            }
+        }
 
         for (int i = 0; i < SCROLL_MAX_SEARCH_SWIPES; i++) {
 
             try {
-                WebElement ele = DriverPool.getDriver().findElement(MobileBy.AndroidUIAutomator("new UiScrollable(" +
-                        getScrollContainerSelector(scrollableContainer, containerSelectorType) +
-                        ".instance(" + containerInstance + "))" +
-                        ".setMaxSearchSwipes(" + SCROLL_MAX_SEARCH_SWIPES + ")" + ".scrollIntoView(" +
-                        getScrollToElementSelector(scrollToEle, eleSelectorType) + ".instance(" + eleSelectorInstance + "))"));
+				By scrollBy = MobileBy.AndroidUIAutomator("new UiScrollable("
+						+ getScrollContainerSelector(scrollableContainer, containerSelectorType) + ".instance("
+						+ containerInstance + "))" + ".setMaxSearchSwipes(" + SCROLL_MAX_SEARCH_SWIPES + ")"
+						+ ".scrollIntoView(" + getScrollToElementSelector(scrollToEle, eleSelectorType) + ".instance("
+						+ eleSelectorInstance + "))");
+				
+                WebElement ele = drv.findElement(scrollBy);
                 if (ele.isDisplayed()) {
                     LOGGER.info("Element found!!!");
-                    el = new ExtendedWebElement(ele, scrollToEle, DriverPool.getDriver());
+                    extendedWebElement = new ExtendedWebElement(scrollBy, scrollToEle, drv);
                     break;
                 }
             } catch (NoSuchElementException noSuchElement) {
@@ -385,7 +425,7 @@ public class AndroidUtils extends MobileUtils {
             }
         }
 
-        return el;
+        return extendedWebElement;
     }
 
     /** Scrolls into view in specified container
@@ -403,19 +443,32 @@ public class AndroidUtils extends MobileUtils {
      **/
     public static ExtendedWebElement scroll(String scrollToEle, ExtendedWebElement scrollableContainer, SelectorType containerSelectorType,
                           SelectorType eleSelectorType){
-        ExtendedWebElement el = null;
+        ExtendedWebElement extendedWebElement = null;
         long startTime = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis());
+		// TODO: support multi threaded WebDriver's removing DriverPool usage
+		WebDriver drv = getDriver();
+
+        //workaorund for appium issue: https://github.com/appium/appium/issues/10159
+        if (scrollToEle.contains(",")) {
+            scrollToEle = StringUtils.join(StringUtils.split(scrollToEle, ","),
+                    ",", 0, 2);
+            if (eleSelectorType.equals(SelectorType.TEXT)) {
+                eleSelectorType = SelectorType.TEXT_CONTAINS;
+            }
+        }
 
         for (int i = 0; i < SCROLL_MAX_SEARCH_SWIPES; i++) {
 
             try {
-                WebElement ele = DriverPool.getDriver().findElement(MobileBy.AndroidUIAutomator("new UiScrollable(" +
-                        getScrollContainerSelector(scrollableContainer, containerSelectorType) + ")" +
-                        ".setMaxSearchSwipes(" + SCROLL_MAX_SEARCH_SWIPES + ")" + ".scrollIntoView(" +
-                        getScrollToElementSelector(scrollToEle, eleSelectorType) + ")"));
+				By scrollBy = MobileBy.AndroidUIAutomator(
+						"new UiScrollable(" + getScrollContainerSelector(scrollableContainer, containerSelectorType)
+								+ ")" + ".setMaxSearchSwipes(" + SCROLL_MAX_SEARCH_SWIPES + ")" + ".scrollIntoView("
+								+ getScrollToElementSelector(scrollToEle, eleSelectorType) + ")");
+				
+                WebElement ele = drv.findElement(scrollBy);
                 if (ele.isDisplayed()) {
                     LOGGER.info("Element found!!!");
-                    el = new ExtendedWebElement(ele, scrollToEle, DriverPool.getDriver());
+                    extendedWebElement = new ExtendedWebElement(scrollBy, scrollToEle, drv);
                     break;
                 }
             } catch (NoSuchElementException noSuchElement) {
@@ -430,7 +483,7 @@ public class AndroidUtils extends MobileUtils {
             }
         }
 
-        return el;
+        return extendedWebElement;
     }
 
     /** Scrolls into view in specified container

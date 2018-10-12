@@ -1,3 +1,6 @@
+
+[![Carina - Getting started](https://raw.githubusercontent.com/qaprosoft/carina/master/docs/img/video.png)](https://youtu.be/UtY-KLFnmI8)
+
 * Install and configure JDK 1.8+
 * Install and configure [Apache Maven 3.5.2+](http://maven.apache.org/)
 * Download and start the latest [Selenium standalone server](http://www.seleniumhq.org/download/)
@@ -8,7 +11,7 @@ The easiest way to initialize new project is to use Carina archetype, you will g
 ```
 mvn archetype:generate -DarchetypeGroupId=com.qaprosoft \
                        -DarchetypeArtifactId=carina-archetype \
-                       -DarchetypeVersion=1.0 \
+                       -DarchetypeVersion=1.5 \
                        -DgroupId=<your_groupId> \
                        -DartifactId=<your_artifactId> \
                        -Dname="<you_proj_name>" \
@@ -60,10 +63,5 @@ By executing this command, Maven should resolve all dependencies, downloading re
 mvn -Dworkspace=<path_to_workspace> eclipse:configure-workspace
 ```
 Here you have to specify the absolute path to the Eclipse workspace. After that, restart Eclipse IDE. Now you can import generated projects such as "Existing Java Project" into Eclipse IDE.
-Generate Eclipse workspace using command:
-```
-mvn clean eclipse:eclipse
-```
-Now you are ready to import project into Eclipse.
 
 ![Eclipse view](img/001-Initial-setup.png)

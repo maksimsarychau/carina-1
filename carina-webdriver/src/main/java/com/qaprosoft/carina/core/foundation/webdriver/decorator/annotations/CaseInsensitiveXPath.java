@@ -13,37 +13,14 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  *******************************************************************************/
-package com.qaprosoft.carina.core.foundation.webdriver.appium.status.model;
+package com.qaprosoft.carina.core.foundation.webdriver.decorator.annotations;
 
-public class Build {
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-    private String version;
-
-    private String revision;
-
-    private String browserName;
-
-    public String getVersion() {
-        return version;
-    }
-
-    public void setVersion(String version) {
-        this.version = version;
-    }
-
-    public String getRevision() {
-        return revision;
-    }
-
-    public void setRevision(String revision) {
-        this.revision = revision;
-    }
-
-    public String getBrowserName() {
-        return browserName;
-    }
-
-    public void setBrowserName(String browserName) {
-        this.browserName = browserName;
-    }
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ ElementType.FIELD, ElementType.TYPE })
+public @interface CaseInsensitiveXPath {
 }

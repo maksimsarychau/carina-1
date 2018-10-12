@@ -18,30 +18,37 @@ package com.qaprosoft.carina.core.foundation.webdriver.device;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 import org.openqa.selenium.Capabilities;
+import org.openqa.selenium.WebDriver;
 
 import com.qaprosoft.carina.commons.models.RemoteDevice;
 import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
+import com.qaprosoft.carina.core.foundation.report.ReportContext;
 import com.qaprosoft.carina.core.foundation.utils.Configuration;
 import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
 import com.qaprosoft.carina.core.foundation.utils.R;
-import com.qaprosoft.carina.core.foundation.utils.android.recorder.exception.ExecutorException;
 import com.qaprosoft.carina.core.foundation.utils.android.recorder.utils.AdbExecutor;
 import com.qaprosoft.carina.core.foundation.utils.android.recorder.utils.CmdLine;
-import com.qaprosoft.carina.core.foundation.utils.android.recorder.utils.Platform;
-import com.qaprosoft.carina.core.foundation.utils.android.recorder.utils.ProcessBuilderExecutor;
 import com.qaprosoft.carina.core.foundation.utils.common.CommonUtils;
 import com.qaprosoft.carina.core.foundation.utils.factory.DeviceType;
 import com.qaprosoft.carina.core.foundation.utils.factory.DeviceType.Type;
+import com.qaprosoft.carina.core.foundation.webdriver.DriverPool;
 
 public class Device extends RemoteDevice {
     private static final Logger LOGGER = Logger.getLogger(Device.class);
@@ -74,6 +81,7 @@ public class Device extends RemoteDevice {
         setOsVersion(remoteDevice.getOsVersion());
         setUdid(remoteDevice.getUdid());
         setRemoteURL(remoteDevice.getRemoteURL());
+        setProxyPort(remoteDevice.getProxyPort());
     }
 
     public Device(Capabilities capabilities) {
@@ -120,6 +128,13 @@ public class Device extends RemoteDevice {
         }
 
         setUdid(deviceUdid);
+        
+        String proxyPort = R.CONFIG.get(SpecialKeywords.MOBILE_PROXY_PORT);
+        if (capabilities.getCapability("proxy_port") != null) {
+            proxyPort = capabilities.getCapability("proxy_port").toString();
+        }
+
+        setProxyPort(proxyPort);
     }
 
     public boolean isPhone() {
@@ -192,46 +207,14 @@ public class Device extends RemoteDevice {
             return;
 
         // [VD] No need to do adb command as stopping STF session do it correctly
-        // LOGGER.info("adb disconnect " + getRemoteURL());
-        // String[] cmd = CmdLine.insertCommandsAfter(executor.getDefaultCmd(), "disconnect", getRemoteURL());
-        // executor.execute(cmd);
+        // in new STF we have huge problems with sessions disconnect
+        LOGGER.info("adb disconnect " + getRemoteURL());
+        String[] cmd = CmdLine.insertCommandsAfter(executor.getDefaultCmd(), "disconnect", getRemoteURL());
+        executor.execute(cmd);
 
     }
 
-    public int startRecording(String pathToFile) {
-        if (!Configuration.getBoolean(Parameter.VIDEO_RECORDING)) {
-            return -1;
-        }
-
-        if (this.isNull())
-            return -1;
-
-        dropFile(pathToFile);
-
-        String[] cmd = CmdLine.insertCommandsAfter(executor.getDefaultCmd(), "-s", getAdbName(), "shell", "screenrecord", "--bit-rate", "1000000",
-                "--verbose", pathToFile);
-
-        try {
-            ProcessBuilderExecutor pb = new ProcessBuilderExecutor(cmd);
-
-            pb.start();
-            return pb.getPID();
-
-        } catch (ExecutorException e) {
-            e.printStackTrace();
-            return -1;
-        }
-    }
-
-    public void stopRecording(Integer pid) {
-        if (isNull())
-            return;
-
-        if (pid != null && pid != -1) {
-            Platform.killProcesses(Arrays.asList(pid));
-        }
-    }
-
+    @Deprecated
     public void dropFile(String pathToFile) {
         if (this.isNull())
             return;
@@ -272,6 +255,7 @@ public class Device extends RemoteDevice {
         return !getFullPackageByName(packageName).contains("not found");
     }
 
+    @Deprecated
     public void pullFile(String pathFrom, String pathTo) {
         if (isNull())
             return;
@@ -667,6 +651,179 @@ public class Device extends RemoteDevice {
             LOGGER.debug("Related apps had been already uninstalled or flag uninstall_related_apps is disabled.");
         }
 
+    }
+    
+    /**
+     * Extract sys log using adb
+     * 
+     * @return sys log
+     */
+    public String getSysLog() {
+        int extractionTimeout = 15;
+        
+        if (isNull()) {
+            return "";
+        }
+        
+        if (!DeviceType.Type.ANDROID_PHONE.getFamily().equalsIgnoreCase(getOs())) {
+            LOGGER.debug("Logcat log is empty since device is not Android");
+            return "";
+        }
+        LOGGER.debug("Extraction of sys log: " + getAdbName());
+
+        // launch extractor in separate thread to avoid possible hang out
+        ExecutorService executorService = Executors.newSingleThreadExecutor();
+        Future<String> future = executorService.submit(new Callable<String>() {
+
+         // adb -s UDID logcat -d
+            @Override
+            public String call() throws Exception {
+                LOGGER.debug("Start Syslog extraction");
+                String[] cmd = CmdLine.insertCommandsAfter(executor.getDefaultCmd(), "-s", getAdbName(), "logcat", "-d");
+                LOGGER.debug("Logcat log has been extracted.");
+                StringBuilder tempStr = new StringBuilder();
+                executor.execute(cmd).stream().forEach((k) -> tempStr.append(k.concat("\n")));
+                return tempStr.toString();
+            }
+            
+        });
+
+        try {
+            String logs = future.get(extractionTimeout, TimeUnit.SECONDS);
+            LOGGER.debug("Logcat logs: ".concat(logs));
+            return logs;
+        } catch (TimeoutException e) {
+            LOGGER.info(String.format("Sys log hasn't been extracted in %d seconds.", extractionTimeout));
+            future.cancel(true);
+            return "Syslog hasn't been extracted in seconds. Operation was interrupted.";
+        } catch (Exception e) {
+//            TODO: add custom handlers for each exceptions based on type
+            LOGGER.info(e);
+            LOGGER.info("Unknown issue was fired. Empty logs will be used.");
+            return "";
+        }
+       
+//        return tempStr.toString();
+    }
+    
+    /**
+     * Clear sys log
+     */
+    public void clearSysLog() {
+        if (isNull()) {
+            return;
+        }
+        
+        if (!DeviceType.Type.ANDROID_PHONE.getFamily().equalsIgnoreCase(getOs())) {
+            LOGGER.debug("Logcat log won't be cleared since device is not Android");
+            return;
+        }
+
+		if (!isConnected()) {
+			//do not use new features if execution is not inside approved cloud
+			return;
+		}
+        
+        LOGGER.info(String.format("Test will be started on device: %s:%s", getName(), getAdbName()));
+        // adb -s UDID logcat -c
+        String[] cmd = CmdLine.insertCommandsAfter(executor.getDefaultCmd(), "-s", getAdbName(), "logcat", "-c");
+        executor.execute(cmd);
+        LOGGER.debug("Logcat logs were cleared.");
+    }
+    
+    /**
+     * Save logcat log for Android (logs will be uploaded in future as artifacts)
+     * TODO: for iOS
+     * 
+     * @return saved file
+     */
+    public File saveSysLog() {
+		if (!isConnected()) {
+			//do not use new features if execution is not inside approved cloud
+			return null;
+		}
+		LOGGER.debug("STF is enabled. Sys log will be extracted...");
+        String fileName = ReportContext.getTestDir() + "/logcat.log";
+        String log = getSysLog();
+        if (log.isEmpty()) {
+            return null;
+        }
+        
+        File file = null;
+        try {
+            file = new File(fileName);
+            FileUtils.writeStringToFile(file, log, Charset.defaultCharset());
+        } catch (IOException e) {
+            LOGGER.info(e);
+            LOGGER.info("Error has been occured during attempt to extract logcat log.");
+        }
+        LOGGER.debug("Logcat file path: ".concat(fileName));
+        return file;
+    }
+    
+    /**
+     * Save xml layout of the application 
+     * @param screenshotName - png file name to generate appropriate uix  
+     * @return saved file
+     */
+    public File generateUiDump(String screenshotName) {
+        if (isNull()) {
+            return null;
+        }
+        
+//        TODO: investigate with iOS: how does it work with iOS
+		if (!isConnected()) {
+			//do not use new features if execution is not inside approved cloud
+			return null;
+		}
+        
+        if (DriverPool.getDrivers().size() == 0) {
+            LOGGER.debug("There is no active drivers in the pool.");
+            return null;
+        }
+        // TODO: investigate how to connect screenshot with xml dump: screenshot
+        // return File -> Zip png and uix or move this logic to zafira
+        
+        LOGGER.debug("UI dump generation...");
+        WebDriver driver = DriverPool.getDriver();
+        String fileName = ReportContext.getTestDir() + String.format("/%s.uix", screenshotName.replace(".png", ""));
+        String pageSource = driver.getPageSource();
+        pageSource = pageSource.replaceAll(SpecialKeywords.ANDROID_START_NODE, SpecialKeywords.ANDROID_START_UIX_NODE).
+                replaceAll(SpecialKeywords.ANDROID_END_NODE, SpecialKeywords.ANDROID_END_UIX_NODE);
+        
+        File file = null;
+        try {
+            file = new File(fileName);
+            FileUtils.writeStringToFile(file, pageSource, Charset.forName("ASCII"));
+        } catch (IOException e) {
+            LOGGER.info(e);
+            LOGGER.info("Error has been met during attempt to extract xml tree.");
+        }
+        LOGGER.debug("XML file path: ".concat(fileName));
+        return file;
+    }
+
+    private boolean isConnected() {
+    	try {
+	        if (getOs().equalsIgnoreCase(DeviceType.Type.ANDROID_PHONE.getFamily())) {
+	            return getConnectedDevices().stream().parallel().anyMatch((m) -> m.contains(getAdbName()));
+	        } else {
+	            return false;
+	        }
+    	} catch (Throwable thr) {
+    		//do nothing for now
+    		return false;
+    	}
+    }
+    
+    private List<String> getConnectedDevices() {
+        // regexp for connected device. Syntax: udid device
+        String deviceUDID = "(.*)\\tdevice$";
+        String[] cmd = CmdLine.insertCommandsAfter(executor.getDefaultCmd(), "devices");
+        List<String> cmdOutput = executor.execute(cmd);
+        List<String> connectedDevices = cmdOutput.stream().parallel().filter((d) -> d.matches(deviceUDID)).collect(Collectors.toList());
+        LOGGER.debug("Connected devices: ".concat(connectedDevices.toString()));
+        return connectedDevices;
     }
 
 }

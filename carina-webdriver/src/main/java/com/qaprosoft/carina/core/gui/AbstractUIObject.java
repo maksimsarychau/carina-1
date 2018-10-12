@@ -15,12 +15,16 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.gui;
 
+import org.openqa.selenium.By;
 import org.openqa.selenium.SearchContext;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.FindBy;
 import org.openqa.selenium.support.PageFactory;
+import org.openqa.selenium.support.ui.ExpectedConditions;
 
+import com.qaprosoft.carina.core.foundation.utils.Configuration;
+import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
 import com.qaprosoft.carina.core.foundation.webdriver.DriverHelper;
 import com.qaprosoft.carina.core.foundation.webdriver.decorator.ExtendedFieldDecorator;
 import com.qaprosoft.carina.core.foundation.webdriver.decorator.ExtendedWebElement;
@@ -30,6 +34,7 @@ public abstract class AbstractUIObject extends DriverHelper {
     protected String name;
 
     protected WebElement rootElement;
+    protected By rootBy;
 
     /**
      * Initializes UI object using {@link PageFactory}. Whole browser window is used as search context
@@ -54,7 +59,7 @@ public abstract class AbstractUIObject extends DriverHelper {
      */
     public AbstractUIObject(WebDriver driver, SearchContext searchContext) {
         super(driver);
-        ExtendedElementLocatorFactory factory = new ExtendedElementLocatorFactory(searchContext);
+        ExtendedElementLocatorFactory factory = new ExtendedElementLocatorFactory(searchContext, (driver != searchContext) ? true : false);
         PageFactory.initElements(new ExtendedFieldDecorator(factory, driver), this);
     }
 
@@ -72,11 +77,11 @@ public abstract class AbstractUIObject extends DriverHelper {
      *         false - otherwise
      */
     public boolean isUIObjectPresent(int timeout) {
-        return isElementPresent(name, rootElement, timeout);
+    	return waitUntil(ExpectedConditions.presenceOfElementLocated(rootBy), timeout);
     }
 
     public boolean isUIObjectPresent() {
-        return isElementPresent(name, rootElement);
+    	return isUIObjectPresent(Configuration.getInt(Parameter.EXPLICIT_TIMEOUT));
     }
 
     public String getName() {
@@ -91,7 +96,17 @@ public abstract class AbstractUIObject extends DriverHelper {
         return rootElement;
     }
 
-    public void setRootElement(WebElement rootElement) {
-        this.rootElement = rootElement;
+    public void setRootElement(WebElement element) {
+        this.rootElement = element;
     }
+    
+    public By getRootBy() {
+        return rootBy;
+    }
+    
+    public void setRootBy(By rootBy) {
+        this.rootBy = rootBy;
+    }
+    
+    
 }

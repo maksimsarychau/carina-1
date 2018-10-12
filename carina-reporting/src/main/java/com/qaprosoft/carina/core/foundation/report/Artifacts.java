@@ -15,46 +15,54 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.report;
 
-import java.util.Date;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 import org.apache.log4j.Logger;
 
+import com.qaprosoft.carina.core.foundation.utils.R;
 import com.qaprosoft.zafira.models.dto.TestArtifactType;
 
-/*
- * Link
+/**
+ * Artifacts - represented by logs, screenshots, videos recorder by tests.
+ * 
+ * @author akhursevich
  */
 final public class Artifacts {
-    protected static final Logger LOGGER = Logger.getLogger(Artifacts.class);
-    private static final ThreadLocal<Set<TestArtifactType>> testArtifacts = ThreadLocal.withInitial(HashSet::new);
+	
+	private static final Logger LOGGER = Logger.getLogger(Artifacts.class);
+	
+	private static final ThreadLocal<Set<TestArtifactType>> testArtifacts = ThreadLocal.withInitial(HashSet::new);
 
-    public static void clearArtifacts() {
-        testArtifacts.remove();
-    }
+	public static void clearArtifacts() {
+		testArtifacts.remove();
+	}
 
-    public synchronized static Set<TestArtifactType> getArtifacts() {
-        return testArtifacts.get();
-    }
+	public synchronized static Set<TestArtifactType> getArtifacts() {
+		return testArtifacts.get();
+	}
 
-    public static void add(String name, String link) {
-        add(name, link, null);
-    }
+	public static void add(String name, String link) {
+		add(name, link, R.CONFIG.getInt("artifacts_expiration_seconds"));
+	}
 
-    public static void add(String name, String link, Date expires_at) {
-        LOGGER.debug("Adding artifact name: " + name + "; link: " + link + "; expires_at: " + expires_at);
-        if (name == null || name.isEmpty()) {
-            return;
-        }
+	/**
+	 * Adds new artifact to test context.
+	 * 
+	 * @param name - artifact name: Log, Demo
+	 * @param link - URL to the artifact
+	 * @param expiresIn - expiration in seconds
+	 */
+	public static void add(String name, String link, Integer expiresIn) {
+		LOGGER.debug("Adding artifact name: " + name + "; link: " + link + "; expiresIn: " + expiresIn);
 
-        if (link == null || link.isEmpty()) {
-            return;
-        }
+		if (name == null || name.isEmpty()) {
+			return;
+		}
 
-        TestArtifactType testArtifactType = new TestArtifactType(name, link, expires_at);
-        if (!testArtifacts.get().contains(testArtifactType)) {
-            testArtifacts.get().add(new TestArtifactType(name, link, expires_at));
-        }
-    }
+		if (link == null || link.isEmpty()) {
+			return;
+		}
+
+		testArtifacts.get().add(new TestArtifactType(name, link, expiresIn));
+	}
 }

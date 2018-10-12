@@ -68,10 +68,14 @@ public class SpecialKeywords {
     public static final String JIRA_TICKET = "JIRA#";
     public static final String TEST_FAILURE_MESSAGE = "testFailureMessage";
     public static final String UUID = "UUID";
-    public static final String VIDEO_FILE_NAME = "/sdcard/test_record.mp4";
 
     public static final String HTML_REPORT = "emailable-report.html";
     public static final String NULL = "NULL";
+
+    public static final String METHOD_NAME = "{method_name}";
+    public static final String METHOD_DESCRIPTION = "{method_description}";
+    public static final String METHOD_PRIORITY = "{method_priority}";
+    public static final String METHOD_THREAD_POOL_SIZE = "{method_thread_pool_size}";
 
     public static final String TEST_NAME_ARGS_MAP = "testNameArgsMap";
     public static final String CANONICAL_TEST_NAME_ARGS_MAP = "canonicalTestNameArgsMap";
@@ -112,9 +116,16 @@ public class SpecialKeywords {
     public static final String SKIP_EXECUTION = "SKIP_EXECUTION";
 
     public static final String ZAFIRA_PROJECT = "zafira_project";
+    public static final String ACTUAL_BROWSER_VERSION = "actual_browser_version";
+    
 
     public static final String COMMENT = "comment";
-
+    
+    public static final String ANDROID_START_NODE = "<android[\\w\\.]* ";
+    public static final String ANDROID_END_NODE = "<\\/android[\\w\\.]*>";
+    public static final String ANDROID_START_UIX_NODE = "<node ";
+    public static final String ANDROID_END_UIX_NODE = "</node>";
+    
     // ------------- CARINA CRYPTO DEFAULT PROPERTIES -----------------
     public static final String CRYPTO_ALGORITHM = "AES/ECB/PKCS5Padding";
     public static final String CRYPTO_KEY_TYPE = "AES";
@@ -127,6 +138,8 @@ public class SpecialKeywords {
 
     // ------------- CAPABILITIES PROPERTIES --------------------------
     public static final String CAPABILITIES = "capabilities";
+    public static final String ENABLE_VIDEO = "capabilities.enableVideo";
+    
     public static final String MOBILE_DEVICE_UDID = "capabilities.udid";
     public static final String MOBILE_DEVICE_NAME = "capabilities.deviceName";
     public static final String MOBILE_DEVICE_BROWSERSTACK_NAME = "capabilities.device";
@@ -137,9 +150,15 @@ public class SpecialKeywords {
     public static final String MOBILE_DEVICE_REMOTE_URL = "capabilities.remoteURL";
     public static final String MOBILE_APP_ACITIVTY = "capabilities.appActivity";
     public static final String MOBILE_APP_PACKAGE = "capabilities.appPackage";
+    public static final String MOBILE_PROXY_PORT = "capabilities.proxyPort";
+    
+    
+    public static final String  SLOT_CAPABILITIES = "slotCapabilities";
+
 
     // ------------- STF PROPERTIES ---------------------------------
     public static final String STF_ENABLED = "STF_ENABLED";
     public static final String STF_URL = "STF_URL";
     public static final String STF_TOKEN = "STF_TOKEN";
+    
 }

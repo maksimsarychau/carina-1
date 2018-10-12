@@ -15,14 +15,19 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.webdriver.decorator;
 
-import java.lang.reflect.*;
+import java.lang.reflect.Field;
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.ParameterizedType;
+import java.lang.reflect.Proxy;
+import java.lang.reflect.Type;
 import java.util.List;
 
 import org.apache.log4j.Logger;
+import org.openqa.selenium.By;
 import org.openqa.selenium.SearchContext;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
-import org.openqa.selenium.internal.Locatable;
+import org.openqa.selenium.interactions.internal.Locatable;
 import org.openqa.selenium.internal.WrapsElement;
 import org.openqa.selenium.support.FindBy;
 import org.openqa.selenium.support.pagefactory.ElementLocator;
@@ -31,6 +36,8 @@ import org.openqa.selenium.support.pagefactory.FieldDecorator;
 import org.openqa.selenium.support.pagefactory.internal.LocatingElementHandler;
 
 import com.qaprosoft.carina.core.foundation.webdriver.ai.FindByAI;
+import com.qaprosoft.carina.core.foundation.webdriver.locator.ExtendedElementLocator;
+import com.qaprosoft.carina.core.foundation.webdriver.locator.ExtendedElementLocatorFactory;
 import com.qaprosoft.carina.core.foundation.webdriver.locator.LocalizedAnnotations;
 import com.qaprosoft.carina.core.foundation.webdriver.locator.internal.AbstractUIObjectListHandler;
 import com.qaprosoft.carina.core.foundation.webdriver.locator.internal.LocatingElementListHandler;
@@ -42,7 +49,7 @@ public class ExtendedFieldDecorator implements FieldDecorator {
     protected ElementLocatorFactory factory;
 
     private WebDriver webDriver;
-
+    
     public ExtendedFieldDecorator(ElementLocatorFactory factory, WebDriver webDriver) {
         this.factory = factory;
         this.webDriver = webDriver;
@@ -72,6 +79,10 @@ public class ExtendedFieldDecorator implements FieldDecorator {
         if (locator == null) {
             return null;
         }
+		if (((ExtendedElementLocatorFactory) factory).isRootElementUsed()) {
+			LOGGER.debug("Setting setShouldCache=false for locator: " + getLocatorBy(locator).toString());
+			((ExtendedElementLocator) locator).setShouldCache(false);
+		}
 
         if (ExtendedWebElement.class.isAssignableFrom(field.getType())) {
             return proxyForLocator(loader, field, locator);
@@ -118,12 +129,14 @@ public class ExtendedFieldDecorator implements FieldDecorator {
         WebElement proxy = (WebElement) Proxy.newProxyInstance(loader, new Class[] { WebElement.class, WrapsElement.class, Locatable.class },
                 handler);
         return new ExtendedWebElement(proxy, field.getName(),
-                field.isAnnotationPresent(FindBy.class) ? new LocalizedAnnotations(field).buildBy() : null, webDriver);
+                field.isAnnotationPresent(FindBy.class) ? new LocalizedAnnotations(field).buildBy() : null);
     }
 
     @SuppressWarnings("unchecked")
     protected <T extends AbstractUIObject> T proxyForAbstractUIObject(ClassLoader loader, Field field,
             ElementLocator locator) {
+    	LOGGER.debug("Setting setShouldCache=false for locator: " + getLocatorBy(locator).toString());
+    	((ExtendedElementLocator) locator).setShouldCache(false);
         InvocationHandler handler = new LocatingElementHandler(locator);
         WebElement proxy = (WebElement) Proxy.newProxyInstance(loader, new Class[] { WebElement.class, WrapsElement.class, Locatable.class },
                 handler);
@@ -145,12 +158,13 @@ public class ExtendedFieldDecorator implements FieldDecorator {
         }
         uiObject.setName(field.getName());
         uiObject.setRootElement(proxy);
+        uiObject.setRootBy(getLocatorBy(locator));
         return uiObject;
     }
 
     @SuppressWarnings("unchecked")
     protected List<ExtendedWebElement> proxyForListLocator(ClassLoader loader, Field field, ElementLocator locator) {
-        InvocationHandler handler = new LocatingElementListHandler(locator, field.getName(), new LocalizedAnnotations(field).buildBy(), webDriver);
+        InvocationHandler handler = new LocatingElementListHandler(webDriver, locator, field.getName(), new LocalizedAnnotations(field).buildBy());
         List<ExtendedWebElement> proxies = (List<ExtendedWebElement>) Proxy.newProxyInstance(loader, new Class[] { List.class }, handler);
 
         return proxies;
@@ -159,6 +173,8 @@ public class ExtendedFieldDecorator implements FieldDecorator {
     @SuppressWarnings("unchecked")
     protected <T extends AbstractUIObject> List<T> proxyForListUIObjects(ClassLoader loader, Field field,
             ElementLocator locator) {
+    	LOGGER.debug("Setting setShouldCache=false for locator: " + getLocatorBy(locator).toString());
+    	((ExtendedElementLocator) locator).setShouldCache(false);
         InvocationHandler handler = new AbstractUIObjectListHandler<T>((Class<?>) getListType(field), webDriver,
                 locator, field.getName());
         List<T> proxies = (List<T>) Proxy.newProxyInstance(loader, new Class[] { List.class }, handler);
@@ -174,5 +190,30 @@ public class ExtendedFieldDecorator implements FieldDecorator {
         }
 
         return ((ParameterizedType) genericType).getActualTypeArguments()[0];
+    }
+    
+    private By getLocatorBy(ElementLocator locator) {
+    	By rootBy = null;
+    	
+        //TODO: get root by annotation from ElementLocator to be able to append by for those elements and reuse fluent waits
+		try {
+			Field byContextField = null;
+
+			byContextField = locator.getClass().getDeclaredField("by");
+			byContextField.setAccessible(true);
+			rootBy = (By) byContextField.get(locator);
+
+		} catch (NoSuchFieldException e) {
+			e.printStackTrace();
+		} catch (IllegalAccessException e) {
+			e.printStackTrace();
+		} catch (ClassCastException e) {
+			e.printStackTrace();
+		} catch (Throwable thr) {
+			thr.printStackTrace();
+			LOGGER.error("Unable to get rootBy via reflection!", thr);
+		}
+    	
+    	return rootBy;
     }
 }

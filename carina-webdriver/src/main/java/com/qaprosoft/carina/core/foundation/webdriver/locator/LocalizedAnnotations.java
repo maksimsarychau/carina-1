@@ -25,6 +25,11 @@ import org.openqa.selenium.support.pagefactory.Annotations;
 
 import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
 import com.qaprosoft.carina.core.foundation.utils.resources.L10N;
+import com.qaprosoft.carina.core.foundation.webdriver.decorator.annotations.AccessibilityId;
+import com.qaprosoft.carina.core.foundation.webdriver.decorator.annotations.ClassChain;
+import com.qaprosoft.carina.core.foundation.webdriver.decorator.annotations.Predicate;
+
+import io.appium.java_client.MobileBy;
 
 public class LocalizedAnnotations extends Annotations {
     private static Pattern L10N_PATTERN = Pattern.compile(SpecialKeywords.L10N_PATTERN);
@@ -35,8 +40,10 @@ public class LocalizedAnnotations extends Annotations {
 
     @Override
     public By buildBy() {
+
         By by = super.buildBy();
         String param = by.toString();
+        
         // replace by using localization pattern
         Matcher matcher = L10N_PATTERN.matcher(param);
         while (matcher.find()) {
@@ -51,7 +58,21 @@ public class LocalizedAnnotations extends Annotations {
             }
 
         }
-        by = createBy(param);
+
+        if (getField().isAnnotationPresent(Predicate.class)) {
+            // TODO: analyze howto determine iOS or Android predicate
+            param = StringUtils.remove(param, "By.xpath: ");
+            by = MobileBy.iOSNsPredicateString(param);
+            // by = MobileBy.AndroidUIAutomator(param);
+        } else if (getField().isAnnotationPresent(ClassChain.class)) {
+            param = StringUtils.remove(param, "By.xpath: ");
+            by = MobileBy.iOSClassChain(param);
+        } else if (getField().isAnnotationPresent(AccessibilityId.class)) {
+            param = StringUtils.remove(param, "By.name: ");
+            by = MobileBy.AccessibilityId(param);
+        } else {
+            by = createBy(param);
+        }
         return by;
     }
 
@@ -92,7 +113,7 @@ public class LocalizedAnnotations extends Annotations {
             return By.className(StringUtils.remove(locator, "By.className: "));
         } else if (locator.startsWith("By.tagName: ")) {
             return By.tagName(StringUtils.remove(locator, "By.tagName: "));
-        }
+        }       
 
         throw new RuntimeException(String.format("Unable to generate By using locator: '%s'!", locator));
     }

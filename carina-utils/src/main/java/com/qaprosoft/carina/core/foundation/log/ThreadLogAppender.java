@@ -22,9 +22,12 @@ import java.io.IOException;
 import java.text.SimpleDateFormat;
 
 import org.apache.log4j.AppenderSkeleton;
+import org.apache.log4j.MDC;
 import org.apache.log4j.spi.LoggingEvent;
 
 import com.qaprosoft.carina.core.foundation.report.ReportContext;
+import com.qaprosoft.carina.core.foundation.utils.Configuration;
+import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
 
 /*
  * This appender log groups test outputs by test method/test thread so they don't mess up each other even they runs in parallel.
@@ -32,7 +35,7 @@ import com.qaprosoft.carina.core.foundation.report.ReportContext;
 public class ThreadLogAppender extends AppenderSkeleton {
     // single buffer for each thread test.log file
     private final ThreadLocal<BufferedWriter> testLogBuffer = new ThreadLocal<BufferedWriter>();
-
+    private long bytesWritten;
     @Override
     public void append(LoggingEvent event) {
         // TODO: [VD] OBLIGATORY double check and create separate unit test for this case
@@ -49,10 +52,14 @@ public class ThreadLogAppender extends AppenderSkeleton {
             if (fw == null) {
                 // 1st request to log something for this thread/test
                 File testLogFile = new File(ReportContext.getTestDir() + "/test.log");
-                if (!testLogFile.exists())
+                if (!testLogFile.exists()){
                     testLogFile.createNewFile();
+                    bytesWritten = 0;
+                }
+
                 fw = new BufferedWriter(new FileWriter(testLogFile, true));
                 testLogBuffer.set(fw);
+
             }
 
             if (event != null) {
@@ -62,6 +69,7 @@ public class ThreadLogAppender extends AppenderSkeleton {
                 // System.out.println("time: " + time);
 
                 long threadId = Thread.currentThread().getId();
+                MDC.put("threadId", "-" + String.valueOf(threadId));
                 // System.out.println("thread: " + threadId);
                 String fileName = event.getLocationInformation().getFileName();
                 // System.out.println("fileName: " + fileName);
@@ -69,7 +77,9 @@ public class ThreadLogAppender extends AppenderSkeleton {
                 String logLevel = event.getLevel().toString();
 
                 String message = "[%s] [%s] [%s] [%s] %s";
-                fw.write(String.format(message, time, fileName, threadId, logLevel, event.getMessage().toString()));
+                message = String.format(message, time, fileName, threadId, logLevel, event.getMessage().toString());
+                ensureCapacity(message.length());
+                fw.write(message);
             } else {
                 fw.write("null");
             }
@@ -99,5 +109,13 @@ public class ThreadLogAppender extends AppenderSkeleton {
     @Override
     public boolean requiresLayout() {
         return false;
+    }
+
+    private void ensureCapacity(int len) throws IOException {
+        long newBytesWritten = this.bytesWritten + len;
+		long maxMegaBytes = Configuration.getLong(Parameter.MAX_LOG_FILE_SIZE) * 1024 * 1024;
+        if (newBytesWritten > maxMegaBytes)
+            throw new IOException("test Log file size exceeded core limit: " + newBytesWritten + " > " + maxMegaBytes);
+        this.bytesWritten = newBytesWritten;
     }
 }

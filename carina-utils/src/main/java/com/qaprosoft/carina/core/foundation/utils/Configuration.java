@@ -22,6 +22,7 @@ import java.util.Map;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
+import org.openqa.selenium.remote.DesiredCapabilities;
 
 import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
 
@@ -114,6 +115,8 @@ public class Configuration {
         BROWSERMOB_PROXY("browsermob_proxy"),
 
         BROWSERMOB_PORT("browsermob_port"),
+        
+        BROWSERMOB_MITM("browsermob_disabled_mitm"),
 
         PROXY_SET_TO_SYSTEM("proxy_set_to_system"),
 
@@ -129,6 +132,7 @@ public class Configuration {
 
         SMART_SCREENSHOT("smart_screenshot"),
 
+        //TODO: temporary restore to keep compilation. remove later
         IMPLICIT_TIMEOUT("implicit_timeout"),
 
         EXPLICIT_TIMEOUT("explicit_timeout"),
@@ -136,6 +140,8 @@ public class Configuration {
         AUTO_DOWNLOAD("auto_download"),
 
         AUTO_DOWNLOAD_APPS("auto_download_apps"),
+        
+    	CUSTOM_ARTIFACTS_FOLDER("custom_artifacts_folder"),
 
         RETRY_INTERVAL("retry_interval"),
 
@@ -143,9 +149,9 @@ public class Configuration {
 
         MAX_SCREENSHOOT_HISTORY("max_screen_history"),
 
-        RESULT_SORTING("result_sorting"),
+        MAX_LOG_FILE_SIZE("max_log_file_size"),
 
-        KEEP_ALL_SCREENSHOTS("keep_all_screenshots"),
+        RESULT_SORTING("result_sorting"),
 
         BIG_SCREEN_WIDTH("big_screen_width"),
 
@@ -191,10 +197,6 @@ public class Configuration {
 
         SUITE_NAME("suite_name"),
 
-        CI_URL("ci_url"),
-
-        CI_BUILD("ci_build"),
-
         JIRA_UPDATER("jira_updater"),
 
         JIRA_URL("jira_url"),
@@ -211,15 +213,15 @@ public class Configuration {
 
         JIRA_CREATE_NEW_TICKET("jira_create_new_ticket"),
 
+        TEST_NAMING_PATTERN("test_naming_pattern"),
+
         // Appium 1.1.x mobile capabilities: iOS and Android
         MOBILE_SCREEN_SWITCHER("mobile_screen_switcher"),
-
-        // DROPBOX_ACCESS_TOKEN("dropbox_access_token"),
-
-        VIDEO_RECORDING("video_recording"),
+        
+        // Enable video recording capabilities only for the final retry attempt
+        OPTIMIZE_VIDEO_RECORDING("optimize_video_recording"),
 
         // TestRail
-
         TESTRAIL_URL("testrail_url"),
 
         TESTRAIL_USER("testrail_user"),
@@ -242,8 +244,6 @@ public class Configuration {
         S3_LOCAL_STORAGE("s3_local_storage"),
 
         // Amazon-Screenshot
-        S3_SCREENSHOT_BUCKET_NAME("s3_screenshot_bucket_name"),
-
         S3_SAVE_SCREENSHOTS("s3_save_screenshots"),
 
         // HockeyApp token
@@ -356,6 +356,8 @@ public class Configuration {
             }
         }
 
+        //write into the log extra information about selenium_host together with capabilities
+        asString.append(String.format("%s=%s\n", "selenium_host", R.CONFIG.get("selenium_host")));
         asString.append("\n------------- Driver capabilities -----------\n");
         // read all properties from config.properties and use "capabilities.*"
         final String prefix = SpecialKeywords.CAPABILITIES + ".";
@@ -423,6 +425,28 @@ public class Configuration {
         return SpecialKeywords.DESKTOP;
     }
 
+    public static String getDriverType(DesiredCapabilities capabilities) {
+    	if (capabilities == null) {
+    		//calculate driver type based on config.properties arguments
+    		return getDriverType();
+    	}
+    	
+    	// calculate driver type based on capability values
+    	String platform = "";
+    	if (capabilities.getCapability("platform") != null) {
+    		platform = capabilities.getCapability("platform").toString();
+    	}
+    	
+    	if (capabilities.getCapability("platformName") != null) {
+    		platform = capabilities.getCapability("platformName").toString();
+    	}
+    	
+        if (SpecialKeywords.ANDROID.equalsIgnoreCase(platform) || SpecialKeywords.IOS.equalsIgnoreCase(platform)) {
+            return SpecialKeywords.MOBILE;
+        }
+
+        return SpecialKeywords.DESKTOP;
+    }
     public static String getMobileApp() {
         // redefine platform if capabilities.app is available
         String mobileApp = "";
@@ -437,5 +461,8 @@ public class Configuration {
         R.CONFIG.put(SpecialKeywords.CAPABILITIES + ".app", mobileApp);
         LOGGER.info("Updated mobile app: " + mobileApp);
     }
-
+    
+    public static Object getCapability(String name) {
+    		return R.CONFIG.get("capabilities." + name);
+    }
 }

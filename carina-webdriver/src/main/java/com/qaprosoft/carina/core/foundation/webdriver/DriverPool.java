@@ -16,19 +16,20 @@
 package com.qaprosoft.carina.core.foundation.webdriver;
 
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.log4j.Logger;
-import org.apache.log4j.NDC;
+import org.apache.log4j.MDC;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.remote.DesiredCapabilities;
+import org.openqa.selenium.remote.RemoteWebDriver;
+import org.openqa.selenium.remote.SessionId;
+import org.openqa.selenium.support.events.EventFiringWebDriver;
 import org.testng.Assert;
 
 import com.qaprosoft.carina.browsermobproxy.ProxyPool;
-import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
-import com.qaprosoft.carina.core.foundation.report.Artifacts;
-import com.qaprosoft.carina.core.foundation.report.ReportContext;
 import com.qaprosoft.carina.core.foundation.utils.Configuration;
 import com.qaprosoft.carina.core.foundation.utils.Configuration.DriverMode;
 import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
@@ -67,15 +68,16 @@ public final class DriverPool {
     }
 
     /**
-     * Get first registered driver from Pool.
+     * @deprecated (Obsolete method which will be removed in 6.0 core generation. Standard getDriver(..) should be reused!)
      * 
+     * Get first registered driver from Pool.
      * @return default WebDriver
      */
     @Deprecated
     public static WebDriver getExistingDriver() {
         ConcurrentHashMap<String, WebDriver> currentDrivers = getDrivers();
         if (currentDrivers.size() == 0) {
-            throw new RuntimeException("Unable to find exiting river in DriverPool!");
+            throw new RuntimeException("Unable to find exiting driver in DriverPool!");
         }
 
         if (currentDrivers.size() > 0) {
@@ -144,7 +146,43 @@ public final class DriverPool {
             LOGGER.debug("Starting new driver as nothing was found in the pool");
             drv = createDriver(name, capabilities, seleniumHost, DevicePool.getNullDevice());
         }
+
+        // [VD] do not wrap EventFiringWebDriver here otherwise DriverListener and all logging will be lost!
         return drv;
+        
+    }
+
+    /**
+     * Get driver by WebElement.
+     * 
+     * @param sessionId - session id to be used for searching a desired driver
+     * 
+     * @return default WebDriver
+     */
+    //TODO: investigate how to allow to use from ExtendedWebElement only
+    public static WebDriver getDriver(SessionId sessionId) {
+    	LOGGER.debug("Detecting WebDriver by sessionId...");
+    	ConcurrentHashMap<String, WebDriver> currentDrivers = getDrivers();
+    	for (Entry<String, WebDriver> entry : currentDrivers.entrySet()) {
+    		WebDriver drv = entry.getValue();
+    		if (drv instanceof EventFiringWebDriver) {
+    			EventFiringWebDriver eventFirDriver = (EventFiringWebDriver) drv;
+    			drv = eventFirDriver.getWrappedDriver();
+    		}
+    		
+    		SessionId drvSessionId = ((RemoteWebDriver)drv).getSessionId();
+    		
+    		LOGGER.debug("analyzing driver: " + drvSessionId.toString());
+    		if (sessionId.equals(drvSessionId)) {
+    			LOGGER.debug("Detected WebDriver by sessionId");
+    			return drv;
+    		}
+    	}
+
+    	LOGGER.warn("Unable to find driver using sessionId artifacts. Returning default one!");
+    	//TODO: take a look into the replaceDriver case and how sessionId are regenerated on page objects
+    	return getDriver();
+    	
     }
 
     /**
@@ -176,7 +214,7 @@ public final class DriverPool {
             if (!isSameDevice) {
                 DevicePool.deregisterDevice();
             }
-
+            
             drv.quit();
 
             LOGGER.debug("Driver exited during restart...");
@@ -192,7 +230,7 @@ public final class DriverPool {
             }
 
         } finally {
-            NDC.pop();
+            MDC.remove("device");
         }
 
         // start default driver. Device can be nullDevice...
@@ -227,9 +265,11 @@ public final class DriverPool {
 
         try {
             LOGGER.debug("Driver exiting..." + name);
-            deregisterDriver(name);
+//          driver deregistration should be performed a bit later than device deregistration
+//          since there some driver related action on method deregister device
             DevicePool.deregisterDevice();
-
+            deregisterDriver(name);
+            
             drv.quit();
 
             LOGGER.debug("Driver exited..." + name);
@@ -246,7 +286,7 @@ public final class DriverPool {
 
         } finally {
             // TODO analyze how to forcibly kill session on device
-            NDC.pop();
+            MDC.remove("device");
         }
     }
 
@@ -254,8 +294,6 @@ public final class DriverPool {
      * Quit all drivers registered for current thread/test
      */
     public static void quitDrivers() {
-
-        stopRecording();
 
         ConcurrentHashMap<String, WebDriver> currentDrivers = getDrivers();
 
@@ -291,10 +329,8 @@ public final class DriverPool {
             try {
                 LOGGER.debug("initDriver start...");
 
-                // TODO: move browsermob startup to this location
-                ProxyPool.startProxy();
-
                 drv = DriverFactory.create(name, device, capabilities, seleniumHost);
+                
                 registerDriver(drv, name);
 
                 init = true;
@@ -305,8 +341,24 @@ public final class DriverPool {
                 }
                 // push custom device name for log4j default messages
                 if (!device.isNull()) {
-                    NDC.push(" [" + device.getName() + "] ");
+                    MDC.put("device", "[" + device.getName() + "] ");
                 }
+                
+				// moved proxy start logic here since device will be initialized here only
+				if (Configuration.getBoolean(Parameter.BROWSERMOB_PROXY)) {
+					int proxyPort = Configuration.getInt(Parameter.BROWSERMOB_PORT);
+					if (!device.isNull()) {
+						try{
+							proxyPort = Integer.parseInt(device.getProxyPort());
+						} catch(NumberFormatException e) {
+							// use default from _config.properties. Use-case for
+							// iOS devices which doesn't have proxy_port as part
+							// of capabilities
+							proxyPort = Configuration.getInt(Parameter.BROWSERMOB_PORT);
+						}
+					}
+					ProxyPool.startProxy(proxyPort);
+				}
 
                 LOGGER.debug("initDriver finish...");
 
@@ -323,50 +375,11 @@ public final class DriverPool {
         }
 
         if (!init) {
+        	//TODO: think about this runtime exception 
             throw new RuntimeException(init_throwable);
         }
 
-        startRecording();
         return drv;
-    }
-
-    private static void startRecording() {
-        if (!Configuration.getBoolean(Parameter.VIDEO_RECORDING)) {
-            return;
-        }
-
-        Integer pid = adbVideoRecorderPid.get();
-        if (pid == null) {
-            // video recording is not started yet for current thread
-            pid = DevicePool.getDevice().startRecording(SpecialKeywords.VIDEO_FILE_NAME);
-            adbVideoRecorderPid.set(pid);
-        } else {
-            LOGGER.warn("Video recording is already started for current thread.");
-        }
-
-    }
-
-    private static void stopRecording() {
-        if (!Configuration.getBoolean(Parameter.VIDEO_RECORDING)) {
-            return;
-        }
-
-        Device device = DevicePool.getDevice();
-        if (!device.isNull()) {
-            device.stopRecording(adbVideoRecorderPid.get());
-            CommonUtils.pause(3); // very often video from device is black. waiting
-            // before pulling the file
-
-            String videoDir = ReportContext.getArtifactsFolder().getAbsolutePath();
-            String uniqueFileName = "VIDEO-" + System.currentTimeMillis() + ".mp4";
-            device.pullFile(SpecialKeywords.VIDEO_FILE_NAME, videoDir + "/" + uniqueFileName);
-
-            String artifactsLink = ReportContext.getTestArtifactsLink();
-
-            // TODO: use expiration date as current_date + 30
-            Artifacts.add("VIDEO", artifactsLink + "/" + uniqueFileName);
-        }
-
     }
 
     /**
@@ -423,34 +436,6 @@ public final class DriverPool {
     }
 
     /**
-     * Check if driver is still valid
-     * 
-     * @param drv
-     *            WebDriver
-     * @return boolean
-     */
-    public static boolean isValid(WebDriver drv) {
-        boolean valid = false;
-        try {
-            LOGGER.debug("Starting driver isValid verification...");
-            if (drv != null && !drv.toString().contains("null")) {
-                valid = true;
-                LOGGER.debug("Driver verified successfully...");
-            }
-        } catch (WebDriverException e) {
-            LOGGER.debug("Error message detected during driver verification: " + e.getMessage(), e);
-            // do nothing
-        } catch (Exception e) {
-            // TODO: it seems like BROWSER_TIMEOUT or NODE_FORWARDING should be handled here as well
-            if (!e.getMessage().contains("Session ID is null.")) {
-                throw e;
-            }
-            // otherwise do nothing
-        }
-        return valid;
-    }
-
-    /**
      * Return number of registered driver per thread
      * 
      * @return int
@@ -482,11 +467,13 @@ public final class DriverPool {
                 single_driver = null;
             }
 
-            Assert.assertFalse(drivers.get(threadId).containsKey(name),
-                    "Driver '" + name + "' was not deregistered from map for thread: " + threadId);
+            if (drivers.get(threadId).containsKey(name)) {
+				LOGGER.error("Driver '" + name + "' was not deregistered from map for thread: " + threadId);
+            }
         } else {
             LOGGER.error("Unable to find '" + name + "' driver for deregistration in thread: " + threadId);
         }
+        ProxyPool.stopProxy();
     }
 
     /**

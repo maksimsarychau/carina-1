@@ -1,3 +1,5 @@
+[![Carina - Configuration](https://raw.githubusercontent.com/qaprosoft/carina/master/docs/img/video.png)](https://youtu.be/MMviWxCS9x4)
+
 ### Configuration files
 There are multiple properties files located in src/main/resources:
 
@@ -5,7 +7,7 @@ There are multiple properties files located in src/main/resources:
 *  **config.properties** - global test configuration
 *  **database.properties** - database connection properties
 *  **email.properties** - emailable reports config
-*  **testdata.properties** - test user credentials
+*  **testdata.properties** - test user credentials 
 
 All properties may be retrieved in test using R class:
 ```
@@ -58,11 +60,6 @@ All project configuration properties are located in **_config.properties** file.
 		<td>en_GB,de_DE,fr_FR</td>
 	</tr>
 	<tr>
-		<td>implicit_timeout</td>
-		<td>Implicit timeout in seconds to wait for element</td>
-		<td>Integer</td>
-	</tr>
-	<tr>
 		<td>retry_interval</td>
 		<td>Timeout interval between calling HTML DOM for the element.<br><b>Note:</b> in ms. For mobile automation specify number from 500-1500 range</td>
 		<td>Integer</td>
@@ -71,11 +68,6 @@ All project configuration properties are located in **_config.properties** file.
 		<td>auto_screenshot</td>
 		<td>Global switch for taking screenshots. When disabled only failures will be captured</td>
 		<td>Boolean</td>
-	</tr>
-	<tr>
-		<td>keep_all_screenshots</td>
-		<td>Keep screenshots artifacts even for passed tests.</td>
-		<td></td>
 	</tr>
 	<tr>
 		<td>report_url</td>
@@ -145,7 +137,7 @@ All project configuration properties are located in **_config.properties** file.
 		<tr>
 		<td>custom_capabilities</td>
 		<td>Name of propertie file with custom capabilities(key-value)</td>
-		<td>custom.propertie</td>
+		<td>custom.properties</td>
 	</tr>
 		<tr>
 		<td>proxy_host</td>
@@ -164,12 +156,12 @@ All project configuration properties are located in **_config.properties** file.
 	</tr>
 		<tr>
 		<td>browsermob_proxy</td>
-		<td>Boolean parameter which enable or disable set up of mobile proxy</td>
+		<td>Boolean parameter which enable or disable automatic BrowserMob proxy launch</td>
 		<td>true, false</td>
 	</tr>
 		<tr>
 		<td>browsermob_port</td>
-		<td>The port number for mobile browser (make sense only for local debugging)</td>
+		<td>The port number for BrowserMob proxy (if nothing or 0 specified then any free port will be reused)</td>
 		<td>Integer</td>
 	</tr>
 		<tr>
@@ -185,16 +177,6 @@ All project configuration properties are located in **_config.properties** file.
 		<tr>
 		<td>track_known_issues</td>
 		<td>Boolean parameter. If it is true and some Jira tickets assosiated with test in case of failure Jira info will be added to report</td>
-		<td>true,false</td>
-	</tr>
-	<tr>
-		<td>smart_screenshot</td>
-		<td>This parameter currently avaliable only for Chrome browser. Enable taking screenshots with metadata</td>
-		<td>true,false</td>
-	</tr>
-	<tr>
-		<td>smart_screenshot</td>
-		<td>This parameter currently avaliable only for Chrome browser. Enable taking screenshots with metadata</td>
 		<td>true,false</td>
 	</tr>
 	<tr>
@@ -305,7 +287,7 @@ All project configuration properties are located in **_config.properties** file.
 		<tr>
 		<td>crypto_key_path</td>
 		<td>Path to file with crypto key</td>
-		<td>./crypto</td>
+		<td>./src/main/resources/crypto.key</td>
 	</tr>
 		<tr>
 		<td>suite_name</td>
@@ -348,8 +330,8 @@ All project configuration properties are located in **_config.properties** file.
 		<td>true, false</td>
 	</tr>
 	<tr>
-		<td>video_recording</td>
-		<td>If feature is test will be recorded</td>
+		<td>optimize_video_recording</td>
+		<td>Enable video recording only for the final retry attempt</td>
 		<td>true, false</td>
 	</tr>
 	<tr>
@@ -396,11 +378,6 @@ All project configuration properties are located in **_config.properties** file.
 		<td>s3_local_storage</td>
 		<td>Directory for downloading artefacts</td>
 		<td>./s3</td>
-	</tr>
-		<tr>
-		<td>s3_screenshot_bucket_name</td>
-		<td>Bucket name on S3 Amamzon for saving report screenshots</td>
-		<td>Screenshot bucket name</td>
 	</tr>
 		<tr>
 		<td>s3_save_screenshots</td>
@@ -504,3 +481,42 @@ And get env-specific argument in test the following way:
 Configuration.getEnvArg("url")
 ```
 As a result you switch between environments just changing env argument in _config.properties file.
+
+### [Zafira](https://github.com/qaprosoft/zafira) configuration
+[**zafira.properties**](https://github.com/qaprosoft/carina-demo/blob/master/src/main/resources/zafira.properties) is used for Zafira QA reporting integration, here you should specify some values for proper integration:<table>
+	<tr>
+		<th>Attribute</th>
+		<th>Meaning</th>
+		<th>Example</th>
+	</tr>
+	<tr>
+		<td>zafira_enabled</td>
+		<td>Root switch</td>
+		<td>true/false</td>
+	</tr>
+	<tr>
+		<td>zafira_service_url</td>
+		<td>Webservice URL</td>
+		<td>http://localhost:8080/zafira-ws</td>
+	</tr>
+	<tr>
+		<td>zafira_project</td>
+		<td>Project name (created in Zafira)</td>
+		<td>empty or any created</td>
+	</tr>
+	<tr>
+		<td>zafira_rerun_failures</td>
+		<td>Rerun only failures</td>
+		<td>true/false</td>
+	</tr>
+	<tr>
+		<td>zafira_report_emails</td>
+		<td>List of emails for report</td>
+		<td>user1@qps.com,user2@qps.com</td>
+	</tr>
+	<tr>
+		<td>zafira_configurator</td>
+		<td>Configurator class (use default)</td>
+		<td>com.qaprosoft.carina.core.foundation.report.ZafiraConfigurator</td>
+	</tr>	
+</table>

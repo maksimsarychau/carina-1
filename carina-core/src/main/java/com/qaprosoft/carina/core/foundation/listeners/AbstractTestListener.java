@@ -15,13 +15,22 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.listeners;
 
-import java.util.*;
+import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.support.events.EventFiringWebDriver;
 import org.testng.IRetryAnalyzer;
 import org.testng.ITestContext;
 import org.testng.ITestResult;
@@ -37,11 +46,15 @@ import com.qaprosoft.carina.core.foundation.report.email.EmailReportItemCollecto
 import com.qaprosoft.carina.core.foundation.report.testrail.TestRail;
 import com.qaprosoft.carina.core.foundation.retry.RetryAnalyzer;
 import com.qaprosoft.carina.core.foundation.retry.RetryCounter;
-import com.qaprosoft.carina.core.foundation.utils.*;
-import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
+import com.qaprosoft.carina.core.foundation.utils.DateUtils;
+import com.qaprosoft.carina.core.foundation.utils.Messager;
+import com.qaprosoft.carina.core.foundation.utils.ParameterGenerator;
+import com.qaprosoft.carina.core.foundation.utils.R;
+import com.qaprosoft.carina.core.foundation.utils.StringGenerator;
 import com.qaprosoft.carina.core.foundation.utils.naming.TestNamingUtil;
 import com.qaprosoft.carina.core.foundation.webdriver.DriverPool;
 import com.qaprosoft.carina.core.foundation.webdriver.Screenshot;
+import com.qaprosoft.carina.core.foundation.webdriver.device.Device;
 import com.qaprosoft.carina.core.foundation.webdriver.device.DevicePool;
 
 @SuppressWarnings("deprecation")
@@ -193,18 +206,28 @@ public class AbstractTestListener extends TestArgsListener {
         // register configuration step as test artifact
         String test = TestNamingUtil.getCanonicalTestName(result);
 
-        Artifacts.add("Log", ReportContext.getTestLogLink(test));
-        Artifacts.add("Demo", ReportContext.getTestScreenshotsLink(test));
-
+        // TODO: do not publish log/demo anymore
+        //Artifacts.add("Logs", ReportContext.getTestLogLink(test));
+        //Artifacts.add("Demo", ReportContext.getTestScreenshotsLink(test));
+        
+        // device log
+        Device device = DevicePool.getDevice();
+        if (!device.isNull()) {
+            LOGGER.debug("Device isn't null additional artifacts will be extracted.");
+            File sysLogFile = device.saveSysLog();
+            if (sysLogFile != null) {
+                LOGGER.debug("Logcat log will be extracted and added as artifact");
+                Artifacts.add("Logcat", ReportContext.getSysLogLink(test));
+            }
+        }
+        
         ReportContext.renameTestDir(test);
 
         // Populate TestRail Cases
 
-        if (!R.ZAFIRA.getBoolean("zafira_enabled")) {
-            result.setAttribute(SpecialKeywords.TESTRAIL_CASES_ID, TestRail.getCases(result));
-            TestRail.updateAfterTest(result, (String) result.getTestContext().getAttribute(SpecialKeywords.TEST_FAILURE_MESSAGE));
-            TestRail.clearCases();
-        }
+        result.setAttribute(SpecialKeywords.TESTRAIL_CASES_ID, TestRail.getCases(result));
+        TestRail.updateAfterTest(result, (String) result.getTestContext().getAttribute(SpecialKeywords.TEST_FAILURE_MESSAGE));
+        TestRail.clearCases();
 
         TestNamingUtil.releaseTestInfoByThread();
     }
@@ -261,10 +284,6 @@ public class AbstractTestListener extends TestArgsListener {
 
         ReportContext.getBaseDir(); // create directory for logging as soon as possible
 
-        /*
-         * //dropbox client initialization if (!Configuration.get(Parameter.DROPBOX_ACCESS_TOKEN).isEmpty()) {
-         * dropboxClient = new DropboxClient(Configuration.get(Parameter.DROPBOX_ACCESS_TOKEN)); }
-         */
         super.onStart(context);
     }
 
@@ -494,7 +513,6 @@ public class AbstractTestListener extends TestArgsListener {
         String group = TestNamingUtil.getPackageName(result);
         String test = TestNamingUtil.getCanonicalTestName(result);
         String linkToLog = ReportContext.getTestLogLink(test);
-        String linkToVideo = ReportContext.getTestVideoLink(test);
         // String linkToScreenshots = ReportContext.getTestScreenshotsLink(testName);
         String linkToScreenshots = null;
 
@@ -510,16 +528,9 @@ public class AbstractTestListener extends TestArgsListener {
         }
 
         if (!FileUtils.listFiles(ReportContext.getTestDir(), new String[] { "png" }, false).isEmpty()) {
-            if (TestResultType.PASS.equals(resultType) && !Configuration.getBoolean(Parameter.KEEP_ALL_SCREENSHOTS)) {
-                // remove physically all screenshots if test/config pass and KEEP_ALL_SCREENSHOTS=false to improve
-                // cooperation with CI tools
-                ReportContext.removeTestScreenshots();
-            } else {
-                linkToScreenshots = ReportContext.getTestScreenshotsLink(test);
-            }
+            linkToScreenshots = ReportContext.getTestScreenshotsLink(test);
         }
-        TestResultItem testResultItem = new TestResultItem(group, test, resultType, linkToScreenshots, linkToLog,
-                linkToVideo, failReason);
+        TestResultItem testResultItem = new TestResultItem(group, test, resultType, linkToScreenshots, linkToLog, failReason);
         testResultItem.setDescription(description);
         // AUTO-1081 eTAF report does not show linked Jira tickets if test PASSED
         // jira tickets should be used for tracking tasks. application issues will be tracked by planned zafira feature
@@ -582,8 +593,15 @@ public class AbstractTestListener extends TestArgsListener {
 
         for (Map.Entry<String, WebDriver> entry : drivers.entrySet()) {
             String driverName = entry.getKey();
-            screenId = Screenshot.captureFullSize(entry.getValue(), driverName + ": " + msg); // in case of failure
+            WebDriver drv = entry.getValue();
+
+            if (drv instanceof EventFiringWebDriver) {
+                drv = ((EventFiringWebDriver) drv).getWrappedDriver();
+            }
+            
+            screenId = Screenshot.captureFailure(drv, driverName + ": " + msg); // in case of failure
         }
         return screenId;
     }
+    
 }

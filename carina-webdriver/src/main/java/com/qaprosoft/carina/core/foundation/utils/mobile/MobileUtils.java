@@ -21,19 +21,26 @@ import org.apache.log4j.Logger;
 import org.openqa.selenium.Dimension;
 import org.openqa.selenium.Point;
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.support.events.EventFiringWebDriver;
 import org.testng.Assert;
 
 import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
 import com.qaprosoft.carina.core.foundation.utils.Configuration;
+import com.qaprosoft.carina.core.foundation.utils.Messager;
 import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
 import com.qaprosoft.carina.core.foundation.utils.android.AndroidService;
 import com.qaprosoft.carina.core.foundation.utils.android.DeviceTimeZone;
+import com.qaprosoft.carina.core.foundation.webdriver.DriverHelper;
 import com.qaprosoft.carina.core.foundation.webdriver.DriverPool;
 import com.qaprosoft.carina.core.foundation.webdriver.decorator.ExtendedWebElement;
 import com.qaprosoft.carina.core.foundation.webdriver.device.DevicePool;
 
 import io.appium.java_client.MobileDriver;
 import io.appium.java_client.TouchAction;
+import io.appium.java_client.touch.LongPressOptions;
+import io.appium.java_client.touch.WaitOptions;
+import io.appium.java_client.touch.offset.ElementOption;
+import io.appium.java_client.touch.offset.PointOption;
 
 public class MobileUtils {
     protected static final Logger LOGGER = Logger.getLogger(MobileUtils.class);
@@ -49,14 +56,15 @@ public class MobileUtils {
         HORIZONTAL_RIGHT_FIRST
     }
 
-    protected static final long IMPLICIT_TIMEOUT = Configuration.getLong(Parameter.IMPLICIT_TIMEOUT);
-
     protected static final long EXPLICIT_TIMEOUT = Configuration.getLong(Parameter.EXPLICIT_TIMEOUT);
 
     protected static final int MINIMUM_TIMEOUT = 2;
 
     private static final int DEFAULT_TOUCH_ACTION_DURATION = 1000;
     private static final int DEFAULT_MAX_SWIPE_COUNT = 50;
+    private static final int DEFAULT_MIN_SWIPE_COUNT = 1;
+    
+    protected static DriverHelper helper = new DriverHelper();
 
     /**
      * Tap with TouchAction by the center of element
@@ -65,7 +73,8 @@ public class MobileUtils {
      */
     public static void tap(ExtendedWebElement element) {
         Point point = element.getLocation();
-        Dimension size = element.getSize();
+        Dimension size = helper.performIgnoreException(() -> element.getSize());
+		
         tap(point.getX() + size.getWidth() / 2, point.getY() + size.getHeight() / 2);
     }
 
@@ -86,8 +95,10 @@ public class MobileUtils {
      *            element
      */
     public static void longTap(ExtendedWebElement elem) {
-        int width = elem.getSize().getWidth();
-        int height = elem.getSize().getHeight();
+    	Dimension size = helper.performIgnoreException(() -> elem.getSize());
+    	
+        int width = size.getWidth();
+        int height = size.getHeight();
 
         int x = elem.getLocation().getX() + width / 2;
         int y = elem.getLocation().getY() + height / 2;
@@ -105,13 +116,16 @@ public class MobileUtils {
      * @return boolean
      */
     public static boolean longPress(ExtendedWebElement element) {
+    	//TODO: SZ migrate to FluentWaits
         try {
-            WebDriver driver = DriverPool.getDriver();
-            TouchAction action = new TouchAction((MobileDriver<?>) driver);
-            action.longPress(element.getElement()).release().perform();
+            WebDriver driver = getDriver();
+            @SuppressWarnings("rawtypes")
+			TouchAction<?> action = new TouchAction((MobileDriver<?>) driver);
+            LongPressOptions options = LongPressOptions.longPressOptions().withElement(ElementOption.element(element.getElement()));
+            action.longPress(options).release().perform();
             return true;
         } catch (Exception e) {
-            LOGGER.info("Error occurs: " + e);
+            LOGGER.info("Error occurs during longPress: " + e, e);
         }
         return false;
     }
@@ -124,8 +138,24 @@ public class MobileUtils {
      * @param duration int
      */
     public static void tap(int startx, int starty, int duration) {
-        TouchAction touchAction = new TouchAction((MobileDriver<?>) DriverPool.getDriver());
-        touchAction.press(startx, starty).waitAction(Duration.ofMillis(duration)).release().perform();
+        //TODO: add Screenshot.capture()
+        try {
+            @SuppressWarnings("rawtypes")
+            TouchAction<?> touchAction = new TouchAction((MobileDriver<?>) getDriver());
+            PointOption<?> startPoint = PointOption.point(startx, starty);
+            WaitOptions waitOptions = WaitOptions.waitOptions(Duration.ofMillis(duration));
+
+            if (duration == 0) {
+                // do not perform waiter as using 6.0.0. appium java client we do longpress instead of simple tap even with 0 wait duration
+                touchAction.press(startPoint).release().perform();
+            } else {
+                touchAction.press(startPoint).waitAction(waitOptions).release().perform();
+            }
+            Messager.TAP_EXECUTED.info(String.valueOf(startx), String.valueOf(starty));
+        } catch (Exception e) {
+            Messager.TAP_NOT_EXECUTED.error(String.valueOf(startx), String.valueOf(starty));
+            throw e;
+        }
     }
 
     /**
@@ -275,12 +305,13 @@ public class MobileUtils {
     public static boolean swipe(ExtendedWebElement element, ExtendedWebElement container, Direction direction,
             int count, int duration) {
 
-        LOGGER.debug("Verify if element present before swipe: " + element.getNameWithLocator().toString());
-        boolean isPresent = element.isElementPresent(1);
-        if (isPresent) {
+        boolean isVisible = element.isVisible(1);
+        if (isVisible) {
             // no sense to continue;
-            LOGGER.debug("element already present before swipe: " + element.getNameWithLocator().toString());
+            LOGGER.info("element already present before swipe: " + element.getNameWithLocator().toString());
             return true;
+        } else {
+        	LOGGER.info("swiping to element: " + element.getNameWithLocator().toString());
         }
 
         Direction oppositeDirection = Direction.DOWN;
@@ -325,26 +356,25 @@ public class MobileUtils {
 
         int currentCount = count;
 
-        while (!isPresent && currentCount-- > 0) {
+        while (!isVisible && currentCount-- > 0) {
             LOGGER.debug("Element not present! Swipe " + direction + " will be executed to element: " + element.getNameWithLocator().toString());
-            swipeInDevice(container, direction, duration);
+            swipeInContainer(container, direction, duration);
 
             LOGGER.info("Swipe was executed. Attempts remain: " + currentCount);
-            isPresent = element.isElementPresent(1);
-            LOGGER.info("Result: " + isPresent);
+            isVisible = element.isVisible(1);
         }
 
         currentCount = count;
-        while (bothDirections && !isPresent && currentCount-- > 0) {
+        while (bothDirections && !isVisible && currentCount-- > 0) {
             LOGGER.debug(
                     "Element not present! Swipe " + oppositeDirection + " will be executed to element: " + element.getNameWithLocator().toString());
-            swipeInDevice(container, oppositeDirection, duration);
+            swipeInContainer(container, oppositeDirection, duration);
             LOGGER.info("Swipe was executed. Attempts remain: " + currentCount);
-            isPresent = element.isElementPresent(1);
-            LOGGER.info("Result: " + isPresent);
+            isVisible = element.isVisible(1);
         }
 
-        return isPresent;
+        LOGGER.info("Result: " + isVisible);
+        return isVisible;
     }
 
     /**
@@ -356,44 +386,64 @@ public class MobileUtils {
      * @param endy int
      * @param duration int Millis
      */
-    public static void swipe(int startx, int starty, int endx, int endy, int duration) {
+    @SuppressWarnings("rawtypes")
+	public static void swipe(int startx, int starty, int endx, int endy, int duration) {
         LOGGER.debug("Starting swipe...");
-        WebDriver drv = DriverPool.getDriver();
+        WebDriver drv = getDriver();
 
         LOGGER.debug("Getting driver dimension size...");
-        Dimension scrSize = drv.manage().window().getSize();
+        Dimension scrSize = helper.performIgnoreException(() -> drv.manage().window().getSize());
         LOGGER.debug("Finished driver dimension size...");
         // explicitly limit range of coordinates
-        if (endx > scrSize.width) {
+        if (endx >= scrSize.width) {
             LOGGER.warn("endx coordinate is bigger then device width! It will be limited!");
             endx = scrSize.width - 1;
         } else {
             endx = Math.max(1, endx);
         }
 
-        if (endy > scrSize.height) {
+        if (endy >= scrSize.height) {
             LOGGER.warn("endy coordinate is bigger then device height! It will be limited!");
-            endy = scrSize.height;
+            endy = scrSize.height - 1;
         } else {
             endy = Math.max(1, endy);
         }
 
-        LOGGER.info("startx: " + startx + "; starty: " + starty + "; endx: " + endx + "; endy: " + endy + "; duration: " + duration);
-        new TouchAction((MobileDriver<?>) drv).press(startx, starty).waitAction(Duration.ofMillis(duration))
-                .moveTo(endx, endy).release().perform();
+		LOGGER.debug("startx: " + startx + "; starty: " + starty + "; endx: " + endx + "; endy: " + endy
+				+ "; duration: " + duration);
+
+		PointOption<?> startPoint = PointOption.point(startx, starty);
+		PointOption<?> endPoint = PointOption.point(endx, endy);
+		WaitOptions waitOptions = WaitOptions.waitOptions(Duration.ofMillis(duration));
+        
+		new TouchAction((MobileDriver<?>) drv).press(startPoint).waitAction(waitOptions).moveTo(endPoint).release()
+				.perform();
 
         LOGGER.debug("Finished swipe...");
     }
 
     /**
-     * swipeInDevice
-     * 
+     * swipeInContainer
+     *
      * @param container ExtendedWebElement
      * @param direction Direction
      * @param duration int
      * @return boolean
      */
-    private static boolean swipeInDevice(ExtendedWebElement container, Direction direction, int duration) {
+    public static boolean swipeInContainer(ExtendedWebElement container, Direction direction, int duration) {
+        return swipeInContainer(container, direction, DEFAULT_MIN_SWIPE_COUNT, duration);
+    }
+
+    /**
+     * swipeInContainer
+     * 
+     * @param container ExtendedWebElement
+     * @param direction Direction
+     * @param count int
+     * @param duration int
+     * @return boolean
+     */
+    public static boolean swipeInContainer(ExtendedWebElement container, Direction direction, int count, int duration) {
 
         int startx = 0;
         int starty = 0;
@@ -402,19 +452,20 @@ public class MobileUtils {
 
         Point elementLocation = null;
         Dimension elementDimensions = null;
+        
+		if (container == null) {
+			// whole screen/driver is a container!
+			WebDriver driver = getDriver();
+			elementLocation = new Point(0, 0); // initial left corner for that case
 
-        if (container == null) {
-            // whole screen/driver is a container!
-            WebDriver driver = DriverPool.getDriver();
-            elementLocation = new Point(0, 0); // initial left corner for that case
-            elementDimensions = driver.manage().window().getSize();
-        } else {
-            if (container.isElementNotPresent(5)) {
-                Assert.fail("Cannot swipe! Impossible to find element " + container.getName());
-            }
-            elementLocation = container.getLocation();
-            elementDimensions = container.getSize();
-        }
+			elementDimensions = helper.performIgnoreException(() -> driver.manage().window().getSize());
+		} else {
+			if (container.isElementNotPresent(5)) {
+				Assert.fail("Cannot swipe! Impossible to find element " + container.getName());
+			}
+			elementLocation = container.getLocation();
+			elementDimensions = helper.performIgnoreException(() -> container.getSize());
+		}
 
         double minCoefficient = 0.3;
         double maxCoefficient = 0.6;
@@ -459,14 +510,19 @@ public class MobileUtils {
         }
 
         LOGGER.debug(String.format("Swipe from (X = %d; Y = %d) to (X = %d; Y = %d)", startx, starty, endx, endy));
+
         try {
-            swipe(startx, starty, endx, endy, duration);
+            for (int i = 0; i < count; ++i) {
+                swipe(startx, starty, endx, endy, duration);
+            }
             return true;
         } catch (Exception e) {
             LOGGER.error(String.format("Error during Swipe from (X = %d; Y = %d) to (X = %d; Y = %d): %s", startx, starty, endx, endy, e));
         }
         return false;
     }
+
+
 
     /**
      * Swipe up several times
@@ -487,7 +543,7 @@ public class MobileUtils {
      */
     public static void swipeUp(final int duration) {
         LOGGER.info("Swipe up will be executed.");
-        swipeInDevice(null, Direction.UP, duration);
+        swipeInContainer(null, Direction.UP, duration);
     }
 
     /**
@@ -509,7 +565,7 @@ public class MobileUtils {
      */
     public static void swipeDown(final int duration) {
         LOGGER.info("Swipe down will be executed.");
-        swipeInDevice(null, Direction.DOWN, duration);
+        swipeInContainer(null, Direction.DOWN, duration);
     }
 
     /**
@@ -534,14 +590,17 @@ public class MobileUtils {
         swipeLeft(null, duration);
     }
 
-    /**
-     * Swipe left in container
-     * 
-     * @param duration int
-     */
+	/**
+	 * Swipe left in container
+	 * 
+	 * @param container
+	 *            ExtendedWebElement
+	 * @param duration
+	 *            int
+	 */
     public static void swipeLeft(ExtendedWebElement container, final int duration) {
         LOGGER.info("Swipe left will be executed.");
-        swipeInDevice(container, Direction.LEFT, duration);
+        swipeInContainer(container, Direction.LEFT, duration);
     }
 
     /**
@@ -566,14 +625,17 @@ public class MobileUtils {
         swipeRight(null, duration);
     }
 
-    /**
-     * Swipe right in container
-     * 
-     * @param duration int
-     */
+	/**
+	 * Swipe right in container
+	 * 
+	 * @param container
+	 *            ExtendedWebElement
+	 * @param duration
+	 *            int
+	 */
     public static void swipeRight(ExtendedWebElement container, final int duration) {
         LOGGER.info("Swipe right will be executed.");
-        swipeInDevice(container, Direction.RIGHT, duration);
+        swipeInContainer(container, Direction.RIGHT, duration);
     }
 
     /**
@@ -630,5 +692,27 @@ public class MobileUtils {
             LOGGER.error(e);
         }
     }
+
+	/**
+	 * Hide keyboard if needed
+	 */
+	public static void hideKeyboard() {
+		try {
+			((MobileDriver<?>) getDriver()).hideKeyboard();
+		} catch (Exception e) {
+			if (!e.getMessage().contains("Soft keyboard not present, cannot hide keyboard")) {
+				LOGGER.error("Exception appears during hideKeyboard: " + e);
+			}
+		}
+	}
+
+	public static WebDriver getDriver() {
+		WebDriver drv = DriverPool.getDriver();
+		if (drv instanceof EventFiringWebDriver) {
+			return ((EventFiringWebDriver) drv).getWrappedDriver();
+		} else {
+			return drv;
+		}
+	}
 
 }

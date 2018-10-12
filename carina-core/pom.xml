@@ -28,16 +28,14 @@
 		<cucumber.java.version>1.2.4</cucumber.java.version>
 		<cucumber.reporting>2.6.3</cucumber.reporting>
 
-		<commons-beanutils.version>1.9.2</commons-beanutils.version>
-
 	</properties>
 
 	<dependencies>
 		<!-- Carina Core sub-modules -->
-		<dependency>
+		<!--<dependency>
 			<groupId>com.qaprosoft</groupId>
 			<artifactId>carina-proxy</artifactId>
-		</dependency>
+		</dependency>-->
 		<dependency>
 			<groupId>com.qaprosoft</groupId>
 			<artifactId>carina-dataprovider</artifactId>
@@ -50,10 +48,10 @@
 			<groupId>com.qaprosoft</groupId>
 			<artifactId>carina-reporting</artifactId>
 		</dependency>
-		<dependency>
+		<!--<dependency>
 			<groupId>com.qaprosoft</groupId>
 			<artifactId>carina-crypto</artifactId>
-		</dependency>
+		</dependency>-->
 		<dependency>
 			<groupId>com.qaprosoft</groupId>
 			<artifactId>carina-webdriver</artifactId>
@@ -93,9 +91,7 @@
 		<dependency>
 			<groupId>commons-beanutils</groupId>
 			<artifactId>commons-beanutils</artifactId>
-			<version>${commons-beanutils.version}</version>
 		</dependency>
-
 
 	</dependencies>
 

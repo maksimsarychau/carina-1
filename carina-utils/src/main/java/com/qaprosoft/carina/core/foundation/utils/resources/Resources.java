@@ -76,12 +76,11 @@ public class Resources {
         URLClassLoader ucl = (URLClassLoader) ClassLoader
                 .getSystemClassLoader();
         for (URL url : ucl.getURLs()) {
-            LOGGER.debug("Iterate through class loader resource: " + url);
-            try {
-                iterateEntry(new File(url.toURI()), filter, collectedURLs);
-            } catch (URISyntaxException e) {
-                LOGGER.debug(e);
-            }
+			try {
+				iterateEntry(new File(url.toURI()), filter, collectedURLs);
+			} catch (URISyntaxException e) {
+				LOGGER.debug(e);
+			}
         }
         return collectedURLs;
     }

@@ -17,6 +17,9 @@ package com.qaprosoft.carina.core.foundation.webdriver.device;
 
 import org.apache.log4j.Logger;
 
+import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
+import com.qaprosoft.carina.core.foundation.utils.R;
+
 public class DevicePool {
     private static final Logger LOGGER = Logger.getLogger(DevicePool.class);
 
@@ -25,15 +28,38 @@ public class DevicePool {
     private static ThreadLocal<Device> currentDevice = new ThreadLocal<Device>();
 
     public static Device registerDevice(Device device) {
+    	
+        boolean stfEnabled = R.CONFIG
+                .getBoolean(SpecialKeywords.CAPABILITIES + "." + SpecialKeywords.STF_ENABLED);
+        if (stfEnabled) {
+            device.connectRemote();
+        }
+        
         // register current device to be able to transfer it into Zafira at the end of the test
         setDevice(device);
         Long threadId = Thread.currentThread().getId();
         LOGGER.debug("register device for current thread id: " + threadId + "; device: '" + device.getName() + "'");
 
+        // clear logcat log for Android devices
+        device.clearSysLog();
+        
         return device;
     }
 
     public static void deregisterDevice() {
+    	Device device = currentDevice.get();
+    	if (device == null) {
+    		LOGGER.error("Unable to deregister null device!");
+    		return;
+    	}
+    	
+        boolean stfEnabled = R.CONFIG
+                .getBoolean(SpecialKeywords.CAPABILITIES + "." + SpecialKeywords.STF_ENABLED);
+        if (stfEnabled) {
+            device.disconnectRemote();
+        }
+        
+    	
         currentDevice.remove();
     }
 
@@ -55,6 +81,11 @@ public class DevicePool {
         return nullDevice;
     }
 
+    public static boolean isRegistered() {
+        Device device = currentDevice.get();
+        return device != null;
+    }
+    
     private static void setDevice(Device device) {
         long threadId = Thread.currentThread().getId();
         LOGGER.debug("Set current device '" + device.getName() + "' to thread: " + threadId);

@@ -4,7 +4,6 @@
 	xmlns="http://maven.apache.org/POM/4.0.0">
 
 	<modelVersion>4.0.0</modelVersion>
-	<groupId>com.qaprosoft</groupId>
 	<artifactId>carina-api</artifactId>
 	<packaging>jar</packaging>
 
@@ -84,11 +83,11 @@
 			<version>2.2.6</version>
 		</dependency>
 		
-		<dependency>
+		<!--<dependency>
 			<groupId>com.jayway.jsonpath</groupId>
 			<artifactId>json-path</artifactId>
 			<version>0.9.1</version>
-		</dependency>
+		</dependency>-->
 
 	</dependencies>
 

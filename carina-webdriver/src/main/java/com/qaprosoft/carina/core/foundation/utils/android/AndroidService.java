@@ -15,7 +15,7 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.utils.android;
 
-import static com.qaprosoft.carina.core.foundation.webdriver.DriverPool.getDriver;
+import static com.qaprosoft.carina.core.foundation.utils.mobile.MobileUtils.getDriver;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import com.qaprosoft.carina.core.foundation.utils.mobile.MobileUtils;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.log4j.Logger;
 
@@ -246,7 +247,7 @@ public class AndroidService {
         String res = "";
         String txt = getCurrentDeviceFocus();
         String regEx1 = ".*?";
-        String regEx2 = "((?:[a-z][a-z\\.\\d\\-]+)\\.(?:[a-z][a-z\\-]+))(?![\\w\\.])";
+//        String regEx2 = "((?:[a-z][a-z\\.\\d\\-]+)\\.(?:[a-z][a-z\\-]+))(?![\\w\\.])";
         Pattern pattern1 = Pattern.compile(regEx1 + regEx1, Pattern.CASE_INSENSITIVE | Pattern.DOTALL);
         Matcher matcher1 = pattern1.matcher(txt);
         if (matcher1.find()) {
@@ -806,7 +807,7 @@ public class AndroidService {
             res = fakeGpsPage.locationSearch(location);
             if (res) {
                 LOGGER.info("Set Fake GPS locale: " + location);
-                AndroidUtils.hideKeyboard();
+                MobileUtils.hideKeyboard();
                 fakeGpsPage.clickSetLocation();
             }
             res = true;
@@ -1056,7 +1057,8 @@ public class AndroidService {
 
         String currentAndroidVersion = DevicePool.getDevice().getOsVersion();
         LOGGER.info("currentAndroidVersion=" + currentAndroidVersion);
-        if (currentAndroidVersion.contains("7.") || (DevicePool.getDevice().getDeviceType() == DeviceType.Type.ANDROID_TABLET)) {
+        if (currentAndroidVersion.contains("7.") ||
+                (DevicePool.getDevice().getDeviceType() == DeviceType.Type.ANDROID_TABLET && !currentAndroidVersion.contains("8."))) {
             LOGGER.info("TimeZone changing for Android 7+ and tablets works only by TimeZone changer apk.");
             workflow = ChangeTimeZoneWorkflow.APK;
         }
@@ -1207,10 +1209,11 @@ public class AndroidService {
             openDateTimeSettingsSetupWizard(true, timeFormat);
 
             String res = getCurrentDeviceFocus();
-            if (res.contains("settings.DateTimeSettingsSetupWizard")) {
-                LOGGER.info("On settings.DateTimeSettingsSetupWizard page");
+
+            if (res.contains(".Settings$DateTimeSettingsActivity")) {
+                LOGGER.info("On '.Settings$DateTimeSettingsActivity' page");
             } else {
-                LOGGER.error("Not on settings.DateTimeSettingsSetupWizard page");
+                LOGGER.error("Not on '.Settings$DateTimeSettingsActivity' page");
             }
             DateTimeSettingsPage dtSettingsPage = new DateTimeSettingsPage(getDriver());
             if (!dtSettingsPage.isOpened(3)) {
@@ -1358,8 +1361,7 @@ public class AndroidService {
         }
 
         setSystemTime(timeFormat);
-
-        openApp("com.android.settings/.DateTimeSettingsSetupWizard");
+        openApp("com.android.settings/.Settings\\$DateTimeSettingsActivity");
     }
 
     /**

@@ -28,7 +28,6 @@ import com.qaprosoft.carina.core.foundation.jira.Jira;
 import com.qaprosoft.carina.core.foundation.performance.Timer;
 import com.qaprosoft.carina.core.foundation.report.testrail.TestRail;
 import com.qaprosoft.carina.core.foundation.retry.RetryCounter;
-import com.qaprosoft.carina.core.foundation.utils.Configuration;
 import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
 import com.qaprosoft.carina.core.foundation.utils.R;
 import com.qaprosoft.carina.core.foundation.utils.naming.TestNamingUtil;
@@ -55,6 +54,11 @@ public class ZafiraConfigurator implements IConfigurator {
         ConfigurationType conf = new ConfigurationType();
         for (Parameter parameter : Parameter.values()) {
             conf.getArg().add(buildArgumentType(parameter.getKey(), R.CONFIG.get(parameter.getKey())));
+        }
+        
+        if (R.CONFIG.containsKey(SpecialKeywords.ACTUAL_BROWSER_VERSION)) {
+            // update browser_version in returned config to register real value instead of * of matcher
+            conf.getArg().add(buildArgumentType("browser_version", R.CONFIG.get(SpecialKeywords.ACTUAL_BROWSER_VERSION)));
         }
 
         if (buildArgumentType("platform", R.CONFIG.get("os")).getValue() != null) {
@@ -151,9 +155,4 @@ public class ZafiraConfigurator implements IConfigurator {
         return Artifacts.getArtifacts();
     }
 
-    @Override
-    public String getReportEmails() {
-        // This code is invoked only from ZafiraListener i.e. Zafira integration is already enabled!
-        return Configuration.get(Parameter.EMAIL_LIST);
-    }
 }

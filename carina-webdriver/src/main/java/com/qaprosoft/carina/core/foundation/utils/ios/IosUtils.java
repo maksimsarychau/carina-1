@@ -18,7 +18,6 @@ package com.qaprosoft.carina.core.foundation.utils.ios;
 import org.apache.log4j.Logger;
 
 import com.qaprosoft.carina.core.foundation.utils.mobile.MobileUtils;
-import com.qaprosoft.carina.core.foundation.webdriver.DriverPool;
 
 import io.appium.java_client.ios.IOSDriver;
 
@@ -33,11 +32,12 @@ public class IosUtils extends MobileUtils {
 
     /**
      * Hide Keyboard
-     * 
+     * Use com.qaprosoft.carina.core.foundation.utils.mobile.MobileUtils.hideKeyboard()
      */
+    @Deprecated
     public static void hideKeyboard() {
         try {
-            ((IOSDriver<?>) DriverPool.getDriver()).hideKeyboard();
+            ((IOSDriver<?>) getDriver()).hideKeyboard();
         } catch (Exception e) {
             LOGGER.info("Keyboard was already hided");
         }

@@ -15,14 +15,9 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.utils;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
-import org.testng.Reporter;
 
-import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
+import com.qaprosoft.carina.core.foundation.utils.messager.IMessager;
 
 /**
  * ReportMessage is used for reporting informational and error messages both
@@ -31,53 +26,36 @@ import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
  * @author akhursevich
  */
 
-public enum Messager {
-    TEST_STARTED(
-            "\r\n" +
-                    "======================================================================================================================================\r\n"
-                    +
-                    "INFO:%s TEST [%s] STARTED at [%s]"),
+// TODO: move to messager package
+public enum Messager implements IMessager {
+	
+    TEST_STARTED("INFO: %s TEST [%s] STARTED at [%s]"),
 
-    TEST_PASSED(
-            "\r\n" +
-                    "INFO:%s TEST [%s] PASSED at [%s] \r\n" +
-                    "======================================================================================================================================"),
+    TEST_PASSED("INFO: %s TEST [%s] PASSED at [%s]"),
 
-    TEST_SKIPPED(
-            "\r\n" +
-                    "INFO:%s TEST [%s] SKIPPED at [%s] - %s\r\n" +
-                    "======================================================================================================================================"),
+    TEST_SKIPPED("INFO: %s TEST [%s] SKIPPED at [%s] - %s"),
 
-    TEST_SKIPPED_AS_ALREADY_PASSED(
-            "\r\n" +
-                    "INFO:%s TEST [%s] SKIPPED as already passed in previous run at [%s]\r\n" +
-                    "======================================================================================================================================"),
+    TEST_SKIPPED_AS_ALREADY_PASSED("INFO: %s TEST [%s] SKIPPED as already passed in previous run at [%s]"),
 
-    TEST_FAILED(
-            "\r\n" +
-                    "INFO:%s TEST [%s] FAILED at [%s] - %s\r\n" +
-                    "======================================================================================================================================"),
+    TEST_FAILED("INFO: %s TEST [%s] FAILED at [%s] - %s"),
 
-    RETRY_RETRY_FAILED(
-            "\r\n" +
-                    "INFO:%s TEST [%s] RETRY %s of %s FAILED - %s\r\n" +
-                    "--------------------------------------------------------------------------------------------------------------------------------------"),
+    RETRY_RETRY_FAILED("INFO: %s TEST [%s] RETRY %s of %s FAILED - %s"),
 
-    CONFIG_STARTED(
-            "INFO:%s CONFIG [%s] START at [%s]"),
+    CONFIG_STARTED("INFO: %s CONFIG [%s] START at [%s]"),
 
-    CONFIG_PASSED(
-            "INFO:%s CONFIG [%s] PASS at [%s]"),
+    CONFIG_PASSED("INFO: %s CONFIG [%s] PASS at [%s]"),
 
-    CONFIG_SKIPPED(
-            "INFO:%s CONFIG [%s] SKIP at [%s] - %s"),
+    CONFIG_SKIPPED("INFO: %s CONFIG [%s] SKIP at [%s] - %s"),
 
-    CONFIG_FAILED(
-            "INFO:%s CONFIG [%s] FAIL at [%s] - %s"),
+    CONFIG_FAILED("INFO: %s CONFIG [%s] FAIL at [%s] - %s"),
 
     TEST_RESULT("RESULT #%s: TEST [%s] %s [%s]"),
 
+    OPENING_URL("INFO: url '%s' is being opening..."),
+    
     OPEN_URL("INFO: url '%s' is opened."),
+    
+    NOT_OPEN_URL("FAIL: url '%s' is not opened!"),
 
     VALIDATION_FAIL("FAIL: '%s' !"),
 
@@ -98,6 +76,8 @@ public enum Messager {
     ELEMENT_PRESENT("PASS: element '%s' presents."),
 
     ELEMENT_NOT_PRESENT("FAIL: element '%s' does not present!"),
+    
+    ELEMENT_CONDITION_NOT_VERIFIED("FAIL: %s - waitCondition for element '%s' not satisfied!"),
 
     ELEMENT_NOT_PRESENT_PASS("PASS: element '%s' does not present"),
 
@@ -109,17 +89,9 @@ public enum Messager {
 
     ELEMENT_WITH_TEXT_NOT_PRESENT("FAIL: element '%s' with text: '%s' does not present!"),
 
-    UNEXPECTED_ELEMENT_PRESENT("FAIL: unexpected element '%s' presents!"),
+    UNEXPECTED_ELEMENT_PRESENT("FAIL: unexpected element '%s' present!"),
 
-    UNEXPECTED_ELEMENT_WITH_TEXT_PRESENT("FAIL: unexpected element '%s' with text '%s' presents!"),
-
-    ELEMENT_BECOME_CLICKABLE("PASS: element '%s' become clickable."),
-
-    ELEMENT_NOT_BECOME_CLICKABLE("FAIL: element '%s' is not become clickable before timeout!"),
-
-    ELEMENT_BECOME_VISIBLE("PASS: element '%s' become visible."),
-
-    ELEMENT_NOT_BECOME_VISIBLE("FAIL: element '%s' is not become visible before timeout!"),
+    UNEXPECTED_ELEMENT_WITH_TEXT_PRESENT("FAIL: unexpected element '%s' with text '%s' present!"),
 
     ELEMENT_CLICKED("PASS: element '%s' is clicked."),
 
@@ -128,6 +100,10 @@ public enum Messager {
     ELEMENT_FOUND("PASS: element '%s' is found."),
 
     ELEMENT_NOT_FOUND("FAIL: element '%s' is not found!"),
+    
+    ELEMENT_ATTRIBUTE_FOUND("PASS: attribute/value '%s'/'%s' for element '%s' is found."),
+
+    ELEMENT_ATTRIBUTE_NOT_FOUND("FAIL: attribute '%s' for element '%s' is not found!"),
 
     ELEMENT_DOUBLE_CLICKED("PASS: element '%s' is double clicked."),
 
@@ -137,10 +113,6 @@ public enum Messager {
 
     ELEMENT_NOT_RIGHT_CLICKED("FAIL: element '%s' is not right clicked!"),
 
-    HIDDEN_ELEMENT_CLICKED("PASS: hidden element '%s' is clicked."),
-
-    HIDDEN_ELEMENT_NOT_CLICKED("FAIL: hidden element '%s' is not clicked!"),
-
     ELEMENT_HOVERED("PASS: element '%s' is hovered."),
 
     ELEMENT_NOT_HOVERED("FAIL: element '%s' is not hovered!"),
@@ -149,6 +121,10 @@ public enum Messager {
 
     ELEMENTS_NOT_DRAGGED_AND_DROPPED("FAIL: element '%s' is not dragged and dropped to '%s'!"),
 
+    KEYS_CLEARED_IN_ELEMENT("PASS: keys cleared in element '%s'."),
+    
+    KEYS_NOT_CLEARED_IN_ELEMENT("FAIL: keys not cleared in element '%s'."),
+    
     KEYS_SEND_TO_ELEMENT("PASS: keys '%s' are sent to element '%s'."),
 
     KEYS_NOT_SEND_TO_ELEMENT("FAIL: keys '%s' are not sent to element '%s'!"),
@@ -199,13 +175,15 @@ public enum Messager {
 
     CHECKBOX_UNCHECKED("PASS: index '%s' was unchecked."),
 
-    SLIDER_MOVED("PASS: silder '%s' was moved by offset X:'%s' Y:'%s'."),
+    SLIDER_MOVED("PASS: slider '%s' was moved by offset X:'%s' Y:'%s'."),
 
-    SLIDER_NOT_MOVED("FAIL: silder '%s' was moved by offset X:'%s' Y:'%s'!");
+    SLIDER_NOT_MOVED("FAIL: slider '%s' was NOT moved by offset X:'%s' Y:'%s'!"),
+
+    TAP_EXECUTED("PASS: Tap on X:'%s' Y:'%s' was executed."),
+
+    TAP_NOT_EXECUTED("FAIL: Tap on X:'%s' Y:'%s' was not executed.");
 
     private static final Logger LOGGER = Logger.getLogger(Messager.class);
-
-    private static Pattern CRYPTO_PATTERN = Pattern.compile(SpecialKeywords.CRYPT);
 
     private String pattern;
 
@@ -213,76 +191,13 @@ public enum Messager {
         this.pattern = pattern;
     }
 
-    public String getMessage(String... args) {
-        return create(args);
+    @Override
+    public String getPattern() {
+        return this.pattern;
     }
 
-    /**
-     * Logs info message using message pattern and incoming parameters.
-     * 
-     * @param args
-     *            for insert into patterns
-     * @return generated message
-     */
-    public String info(String... args) {
-        String message = create(args);
-        LOGGER.info(message);
-        return message;
-    }
-
-    /**
-     * Logs error message and adds message to TestNG report.
-     * 
-     * @param args
-     *            for insert into patterns
-     * @return generated message
-     */
-    public String error(String... args) {
-        String message = create(args);
-        Reporter.log(message);
-        LOGGER.error(message);
-        return message;
-    }
-
-    /**
-     * Logs info message and adds message to TestNG report.
-     * 
-     * @param args
-     *            for insert into patterns
-     * @return generated message
-     */
-    public String report(String... args) {
-        String message = create(args);
-        Reporter.log(message);
-        return message;
-    }
-
-    /**
-     * Generates error message using message pattern and incoming parameters.
-     * 
-     * @param args
-     *            for insert into pattern
-     * @return generated message
-     */
-    private String create(String... args) {
-        String message = "";
-        try {
-            // Changes symbols to '*' if starts with 'crypto_'
-            for (int i = 0; i < args.length; i++) {
-                if (args[i] != null) {
-                    Matcher matcher = CRYPTO_PATTERN.matcher(args[i]);
-                    if (matcher.find()) {
-                        int start = args[i].indexOf(":") + 1;
-                        int end = args[i].indexOf("}");
-                        args[i] = StringUtils.replace(args[i], matcher.group(), StringUtils.repeat('*', end - start));
-                    }
-                }
-            }
-            message = String.format(pattern, (Object[]) args);
-        } catch (Exception e) {
-            LOGGER.error("Report message creation error!");
-            e.printStackTrace();
-        }
-        return message;
+    @Override
+    public Logger getLogger() {
+        return LOGGER;
     }
 }

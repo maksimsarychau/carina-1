@@ -1,3 +1,5 @@
+[![Carina - Project structure](https://raw.githubusercontent.com/qaprosoft/carina/master/docs/img/video.png)](https://youtu.be/I1u07JspECE)
+
 Carina test project is structured as a standard Maven project:
 ```
 carina-demo
@@ -24,6 +26,6 @@ carina-demo
 
 ![src/main/java](img/004-Project-structure.png)
 
-* **src/main/resources** - contains l18n bundles, configuration properties files and MyBastis profiles if needed
+* **src/main/resources** - contains l18n bundles, configuration properties files and MyBatis profiles if needed
 
 ![src/main/resources](img/005-Project-structure.png)

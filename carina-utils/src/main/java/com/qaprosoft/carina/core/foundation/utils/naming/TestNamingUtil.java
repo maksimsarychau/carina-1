@@ -27,6 +27,7 @@ import org.testng.ITestResult;
 
 import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
 import com.qaprosoft.carina.core.foundation.retry.RetryCounter;
+import com.qaprosoft.carina.core.foundation.utils.Configuration;
 
 /**
  * Common naming utility for unique test method identification.
@@ -200,12 +201,27 @@ public class TestNamingUtil {
 
         if (invocationID != -1) {
             // TODO: analyze if "InvCount=nnnn" is already present in name and don't append it one more time
-            testName = testName + " - " + m.getMethodName() + String.format(SpecialKeywords.INVOCATION_COUNTER, String.format("%04d", invocationID));
+            testName = testName + " - " + adjustTestName(m) + String.format(SpecialKeywords.INVOCATION_COUNTER, String.format("%04d", invocationID));
         } else {
-            testName = testName + " - " + m.getMethodName();
+            testName = testName + " - " + adjustTestName(m);
         }
 
         return StringEscapeUtils.escapeHtml4(testName);
+    }
+
+    private static String adjustTestName(ITestNGMethod m) {
+        String testName = Configuration.get(Configuration.Parameter.TEST_NAMING_PATTERN);
+        testName = testName.replace(SpecialKeywords.METHOD_NAME, m.getMethodName());
+        testName = testName.replace(SpecialKeywords.METHOD_PRIORITY, String.valueOf(m.getPriority()));
+        testName = testName.replace(SpecialKeywords.METHOD_THREAD_POOL_SIZE, String.valueOf(m.getThreadPoolSize()));
+
+        if (m.getDescription() != null) {
+        	testName = testName.replace(SpecialKeywords.METHOD_DESCRIPTION, m.getDescription());
+        } else {
+        	testName = testName.replace(SpecialKeywords.METHOD_DESCRIPTION, "");
+        }
+
+        return testName;
     }
 
 }

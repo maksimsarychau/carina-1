@@ -20,7 +20,11 @@ import java.io.FileNotFoundException;
 import java.io.PrintWriter;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Method;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Enumeration;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -31,8 +35,19 @@ import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.remote.DesiredCapabilities;
-import org.testng.*;
-import org.testng.annotations.*;
+import org.testng.Assert;
+import org.testng.ITestContext;
+import org.testng.ITestNGMethod;
+import org.testng.ITestResult;
+import org.testng.SkipException;
+import org.testng.annotations.AfterClass;
+import org.testng.annotations.AfterMethod;
+import org.testng.annotations.AfterSuite;
+import org.testng.annotations.BeforeClass;
+import org.testng.annotations.BeforeMethod;
+import org.testng.annotations.BeforeSuite;
+import org.testng.annotations.DataProvider;
+import org.testng.annotations.Listeners;
 import org.testng.xml.XmlTest;
 
 import com.amazonaws.services.s3.model.S3Object;
@@ -44,16 +59,22 @@ import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
 import com.qaprosoft.carina.core.foundation.dataprovider.core.DataProviderFactory;
 import com.qaprosoft.carina.core.foundation.jira.Jira;
 import com.qaprosoft.carina.core.foundation.listeners.AbstractTestListener;
-import com.qaprosoft.carina.core.foundation.report.*;
+import com.qaprosoft.carina.core.foundation.report.Artifacts;
+import com.qaprosoft.carina.core.foundation.report.ReportContext;
+import com.qaprosoft.carina.core.foundation.report.TestResultItem;
+import com.qaprosoft.carina.core.foundation.report.TestResultType;
 import com.qaprosoft.carina.core.foundation.report.email.EmailManager;
 import com.qaprosoft.carina.core.foundation.report.email.EmailReportGenerator;
 import com.qaprosoft.carina.core.foundation.report.email.EmailReportItemCollector;
 import com.qaprosoft.carina.core.foundation.report.testrail.TestRail;
 import com.qaprosoft.carina.core.foundation.skip.ExpectedSkipManager;
-import com.qaprosoft.carina.core.foundation.utils.*;
 import com.qaprosoft.carina.core.foundation.utils.Configuration;
 import com.qaprosoft.carina.core.foundation.utils.Configuration.DriverMode;
 import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
+import com.qaprosoft.carina.core.foundation.utils.DateUtils;
+import com.qaprosoft.carina.core.foundation.utils.JsonUtils;
+import com.qaprosoft.carina.core.foundation.utils.Messager;
+import com.qaprosoft.carina.core.foundation.utils.R;
 import com.qaprosoft.carina.core.foundation.utils.common.CommonUtils;
 import com.qaprosoft.carina.core.foundation.utils.metadata.MetadataCollector;
 import com.qaprosoft.carina.core.foundation.utils.metadata.model.ElementsInfo;
@@ -62,7 +83,7 @@ import com.qaprosoft.carina.core.foundation.utils.resources.I18N;
 import com.qaprosoft.carina.core.foundation.utils.resources.L10N;
 import com.qaprosoft.carina.core.foundation.utils.resources.L10Nparser;
 import com.qaprosoft.carina.core.foundation.webdriver.DriverPool;
-import com.qaprosoft.carina.core.foundation.webdriver.core.capability.CapabilitiesLoder;
+import com.qaprosoft.carina.core.foundation.webdriver.core.capability.CapabilitiesLoader;
 import com.qaprosoft.carina.core.foundation.webdriver.device.Device;
 import com.qaprosoft.carina.core.foundation.webdriver.device.DevicePool;
 import com.qaprosoft.hockeyapp.HockeyAppManager;
@@ -79,7 +100,6 @@ public abstract class AbstractTest // extends DriverHelper
 
     protected APIMethodBuilder apiMethodBuilder;
 
-    protected static final long IMPLICIT_TIMEOUT = Configuration.getLong(Parameter.IMPLICIT_TIMEOUT);
     protected static final long EXPLICIT_TIMEOUT = Configuration.getLong(Parameter.EXPLICIT_TIMEOUT);
 
     protected static final String SUITE_TITLE = "%s%s%s - %s (%s%s)";
@@ -168,13 +188,13 @@ public abstract class AbstractTest // extends DriverHelper
         String customCapabilities = Configuration.get(Parameter.CUSTOM_CAPABILITIES);
         if (!customCapabilities.isEmpty()) {
             // redefine core CONFIG properties using custom capabilities file
-            new CapabilitiesLoder().loadCapabilities(customCapabilities);
+            new CapabilitiesLoader().loadCapabilities(customCapabilities);
         }
 
         String extraCapabilities = Configuration.get(Parameter.EXTRA_CAPABILITIES);
         if (!extraCapabilities.isEmpty()) {
             // redefine core CONFIG properties using extra capabilities file
-            new CapabilitiesLoder().loadCapabilities(extraCapabilities);
+            new CapabilitiesLoader().loadCapabilities(extraCapabilities);
         }
 
         try {
@@ -269,7 +289,7 @@ public abstract class AbstractTest // extends DriverHelper
             }
 
             ReportContext.removeTempDir(); // clean temp artifacts directory
-            HtmlReportGenerator.generate(ReportContext.getBaseDir().getAbsolutePath());
+            //HtmlReportGenerator.generate(ReportContext.getBaseDir().getAbsolutePath());
 
             String browser = getBrowser();
             String deviceName = getDeviceName();
@@ -304,7 +324,7 @@ public abstract class AbstractTest // extends DriverHelper
             // Generate and send email report using regular method
             EmailReportGenerator report = new EmailReportGenerator(title, env,
                     Configuration.get(Parameter.APP_VERSION), deviceName,
-                    browser, DateUtils.now(), DateUtils.timeDiff(startDate), getCIJobReference(),
+                    browser, DateUtils.now(), DateUtils.timeDiff(startDate),
                     EmailReportItemCollector.getTestResults(),
                     EmailReportItemCollector.getCreatedItems());
 
@@ -466,17 +486,6 @@ public abstract class AbstractTest // extends DriverHelper
                         reportLinks);
             }
         }
-    }
-
-    // TODO: remove method and CI_* arguments from core
-    private String getCIJobReference() {
-        String ciTestJob = null;
-        if (!Configuration.isNull(Parameter.CI_URL)
-                && !Configuration.isNull(Parameter.CI_BUILD)) {
-            ciTestJob = Configuration.get(Parameter.CI_URL)
-                    + Configuration.get(Parameter.CI_BUILD);
-        }
-        return ciTestJob;
     }
 
     /**
@@ -681,7 +690,9 @@ public abstract class AbstractTest // extends DriverHelper
         if (drv == null) {
             Assert.fail("Unable to find driver by name: " + name);
         }
+        
         return drv;
+        //return castDriver(drv);
     }
 
     protected WebDriver getDriver(String name, DesiredCapabilities capabilities, String seleniumHost) {
@@ -690,8 +701,17 @@ public abstract class AbstractTest // extends DriverHelper
             Assert.fail("Unable to find driver by name: " + name);
         }
         return drv;
+        //return castDriver(drv);
     }
 
+/*    private WebDriver castDriver(WebDriver drv) {
+        if (drv instanceof EventFiringWebDriver) {
+            return ((EventFiringWebDriver) drv).getWrappedDriver();
+        } else {
+            return drv;
+        }
+    }*/
+    
     protected static void quitDrivers() {
         DriverPool.quitDrivers();
     }
@@ -711,11 +731,13 @@ public abstract class AbstractTest // extends DriverHelper
                 PrintWriter out = null;
                 try {
                     out = new PrintWriter(file);
+                    out.append(JsonUtils.toJson(MetadataCollector.getAllCollectedData().get(key)));
+                    out.flush();
                 } catch (FileNotFoundException e) {
                     LOGGER.error("Unable to write metadata to json file: " + file.getAbsolutePath(), e);
+                } finally {
+                    out.close();
                 }
-                out.append(JsonUtils.toJson(MetadataCollector.getAllCollectedData().get(key)));
-                out.flush();
                 LOGGER.debug("Created medata for '" + key + "' object...");
             }
 
