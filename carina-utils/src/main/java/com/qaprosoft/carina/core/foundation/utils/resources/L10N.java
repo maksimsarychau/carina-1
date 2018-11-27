@@ -15,17 +15,16 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.utils.resources;
 
-import java.io.UnsupportedEncodingException;
-import java.net.URL;
-import java.util.*;
-
+import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
+import com.qaprosoft.carina.core.foundation.utils.Configuration;
+import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
 import org.apache.commons.io.FilenameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 
-import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
-import com.qaprosoft.carina.core.foundation.utils.Configuration;
-import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
+import java.io.UnsupportedEncodingException;
+import java.net.URL;
+import java.util.*;
 
 /*
  * QUALITY-1076:
@@ -38,7 +37,7 @@ import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
  * <configuration>
  * <useSystemClassLoader>false</useSystemClassLoader>
  * </configuration>
- * 
+ *
  */
 
 public class L10N {
@@ -57,13 +56,14 @@ public class L10N {
         List<String> loadedResources = new ArrayList<String>();
 
         for (URL u : Resources.getResourceURLs(new ResourceURLFilter() {
-            public @Override boolean accept(URL u) {
-				String s = u.getPath();
-				boolean contains = s.contains(SpecialKeywords.L10N);
-				if (contains) {
-					LOGGER.debug("L10N: file URL: " + u);
-				}
-				return contains;
+            public @Override
+            boolean accept(URL u) {
+                String s = u.getPath();
+                boolean contains = s.contains(SpecialKeywords.L10N);
+                if (contains) {
+                    LOGGER.debug("L10N: file URL: " + u);
+                }
+                return contains;
             }
         })) {
             LOGGER.debug(String.format(
@@ -137,7 +137,7 @@ public class L10N {
 
     /**
      * get Default Locale
-     * 
+     *
      * @return Locale
      */
     public static Locale getDefaultLocale() {
@@ -153,10 +153,8 @@ public class L10N {
 
     /**
      * getText by key for default locale.
-     * 
-     * @param key
-     *            - String
-     * 
+     *
+     * @param key - String
      * @return String
      */
     public static String getText(String key) {
@@ -165,11 +163,9 @@ public class L10N {
 
     /**
      * getText for specified locale and key.
-     * 
-     * @param key
-     *            - String
-     * @param locale
-     *            - Locale
+     *
+     * @param key    - String
+     * @param locale - Locale
      * @return String
      */
     public static String getText(String key, Locale locale) {
@@ -179,15 +175,15 @@ public class L10N {
             ResourceBundle bundle = iter.next();
             try {
                 String value = bundle.getString(key);
-				if (isUTF8()) {
-					try {
-						LOGGER.debug("converting key '" + value + "' to UTF-8");
-						value = new String(value.getBytes("ISO-8859-1"), "UTF-8");
-					} catch (UnsupportedEncodingException er) {
-						LOGGER.debug("Error: ", er);
-					}
-				}
-				
+                if (isUTF8()) {
+                    try {
+                        LOGGER.debug("converting key '" + value + "' to UTF-8");
+                        value = new String(value.getBytes("ISO-8859-1"), "UTF-8");
+                    } catch (UnsupportedEncodingException er) {
+                        LOGGER.debug("Error: ", er);
+                    }
+                }
+
                 LOGGER.debug("Looking for value for locale:'"
                         + locale.toString()
                         + "' current iteration locale is: '"
@@ -224,7 +220,7 @@ public class L10N {
     public static String generateConcatForXPath(String xpathString) {
         String returnString = "";
         String searchString = xpathString;
-        char[] quoteChars = new char[] { '\'', '"' };
+        char[] quoteChars = new char[]{'\'', '"'};
 
         int quotePos = StringUtils.indexOfAny(searchString, quoteChars);
         if (quotePos == -1) {

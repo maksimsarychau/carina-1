@@ -34,6 +34,9 @@ public class SpecialKeywords {
     public static final String I18N_PATTERN = String.format("\\{%s:.*\\}", I18N);
     public static final String L10N_PATTERN = String.format("\\{(%s:.[^\\'\\\"]*)}", L10N);
 
+    public static final String L10N_UTF8_ENCODING = "UTF-8";
+    public static final String L10N_ISO8859_1_ENCODING = "ISO-8859-1";
+
     public static final String EXCEL = "\\{excel:.*\\}";
     public static final String CRYPT = "\\{crypt:[^\\{\\}]*\\}";
     public static final String CRYPT_WRAPPER = "{crypt:%s}";
