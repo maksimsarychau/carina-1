@@ -38,11 +38,11 @@ public class CondidateBlock extends AbstractUIObject {
     }
 
     public void sendKeysToInputField(String text) {
-        click(inputField);
-        type(inputField, text);
+        inputField.click();
+        inputField.type(text);
     }
 
     public void getFirstPhone() {
-        click(autocompleteSearchElements.get(0));
+        autocompleteSearchElements.get(0).click();
     }
 }

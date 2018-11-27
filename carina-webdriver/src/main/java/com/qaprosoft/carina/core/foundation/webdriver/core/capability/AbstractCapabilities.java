@@ -62,7 +62,7 @@ public abstract class AbstractCapabilities {
 
         // add capabilities based on dynamic _config.properties variables
         capabilities = initCapabilities(capabilities);
-
+        
         return capabilities;
     }
 
@@ -94,12 +94,13 @@ public abstract class AbstractCapabilities {
     }
 
     protected Proxy setupProxy() {
+        ProxyPool.setupBrowserMobProxy();
+        SystemProxy.setupProxy();
+        
         String proxyHost = Configuration.get(Parameter.PROXY_HOST);
         String proxyPort = Configuration.get(Parameter.PROXY_PORT);
         List<String> protocols = Arrays.asList(Configuration.get(Parameter.PROXY_PROTOCOLS).split("[\\s,]+"));
 
-        ProxyPool.setupBrowserMobProxy();
-        SystemProxy.setupProxy();
 
         if (proxyHost != null && !proxyHost.isEmpty() && proxyPort != null && !proxyPort.isEmpty()) {
 
