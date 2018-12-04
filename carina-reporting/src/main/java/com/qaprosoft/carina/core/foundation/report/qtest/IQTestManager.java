@@ -15,15 +15,20 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.report.qtest;
 
-import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
-import com.qaprosoft.carina.core.foundation.report.testrail.ITestCases;
-import com.qaprosoft.carina.core.foundation.utils.Configuration;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
 import org.apache.log4j.Logger;
 import org.testng.ITestContext;
 import org.testng.ITestResult;
 
-import java.lang.reflect.Method;
-import java.util.*;
+import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
+import com.qaprosoft.carina.core.foundation.report.testrail.ITestCases;
 
 public interface IQTestManager extends ITestCases {
     Logger LOGGER = Logger.getLogger(IQTestManager.class);
@@ -33,9 +38,7 @@ public interface IQTestManager extends ITestCases {
 
         //add cases form xls/cvs dataprovider
         int projectID = getQTestProjectId(result.getTestContext());
-        int cycleID = getQTestCycleId(result.getTestContext());
-
-        if (projectID != -1 && cycleID != -1) {
+        if (projectID != -1) {
 
             List<String> dataProviderIds = new ArrayList<String>();
             @SuppressWarnings("unchecked")
@@ -74,7 +77,9 @@ public interface IQTestManager extends ITestCases {
                 if (testMethod.isAnnotationPresent(QTestCases.class)) {
                     QTestCases methodAnnotation = testMethod.getAnnotation(QTestCases.class);
                     String platform = methodAnnotation.platform();
-                    if (platform.equalsIgnoreCase(Configuration.getPlatform()) || platform.isEmpty()) {
+                    String language = methodAnnotation.language();
+                    String locale = methodAnnotation.locale();
+                    if (isValidPlatform(platform) && isValidLanguage(language) && isValidLocale(locale)) {
                         String[] testCaseList = methodAnnotation.id().split(",");
                         for (String tcase : testCaseList) {
                             String uuid = tcase;
@@ -89,7 +94,9 @@ public interface IQTestManager extends ITestCases {
                     for (QTestCases tcLocal : methodAnnotation.value()) {
 
                         String platform = tcLocal.platform();
-                        if (platform.equalsIgnoreCase(Configuration.getPlatform()) || platform.isEmpty()) {
+                        String language = tcLocal.language();
+                        String locale = tcLocal.locale();
+                        if (isValidPlatform(platform) && isValidLanguage(language) && isValidLocale(locale)) {
                             String[] testCaseList = tcLocal.id().split(",");
                             for (String tcase : testCaseList) {
                                 String uuid = tcase;
@@ -122,14 +129,5 @@ public interface IQTestManager extends ITestCases {
             return -1;
         }
     }
-
-    default int getQTestCycleId(ITestContext context) {
-        String id = context.getSuite().getParameter(SpecialKeywords.QTEST_CYCLE_ID);
-        if (id != null) {
-            return Integer.valueOf(id.trim());
-        } else {
-            return -1;
-        }
-    }
-
+    
 }
