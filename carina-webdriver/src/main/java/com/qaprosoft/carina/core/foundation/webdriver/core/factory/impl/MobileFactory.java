@@ -76,7 +76,8 @@ public class MobileFactory extends AbstractFactory {
         // use comparison for custom_capabilities here to localize as possible usage of
         // CUSTOM attribute
         String customCapabilities = Configuration.get(Parameter.CUSTOM_CAPABILITIES);
-        if (!customCapabilities.isEmpty()) {
+        if (!customCapabilities.isEmpty()
+                && (customCapabilities.toLowerCase().contains("browserstack") || customCapabilities.toLowerCase().contains("saucelabs"))) {
             mobilePlatformName = SpecialKeywords.CUSTOM;
         }
 
@@ -152,7 +153,7 @@ public class MobileFactory extends AbstractFactory {
                 // 3rd party solutions like browserstack or saucelabs return not null
                 if (remoteDevice != null && remoteDevice.getName() != null) {
                     device = new Device(remoteDevice);
-                } else {
+                } else if (driver != null) {
                     device = new Device(driver.getCapabilities());
                 }
 

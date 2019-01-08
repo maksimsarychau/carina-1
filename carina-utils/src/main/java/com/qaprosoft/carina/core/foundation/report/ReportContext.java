@@ -184,7 +184,7 @@ public class ReportContext {
         if (metaDataDirectory == null) {
         	String absolutePath = getBaseDir().getAbsolutePath();
             try {
-                metaDataDirectory = new File(String.format("%s/%s/metadata", URLDecoder.decode(absolutePath, "utf-8")), ARTIFACTS_FOLDER);
+                metaDataDirectory = new File(String.format("%s/%s/metadata", URLDecoder.decode(absolutePath, "utf-8"), ARTIFACTS_FOLDER));
             } catch (UnsupportedEncodingException e) {
                 throw new RuntimeException("Artifacts metadata folder is not created in base dir: " + absolutePath);
             }
@@ -392,7 +392,7 @@ public class ReportContext {
             }
 
         } catch (IOException e) {
-            e.printStackTrace();
+            LOGGER.error("generateHtmlReport failure", e);
         }
     }
 
@@ -655,8 +655,7 @@ public class ReportContext {
             String folder = testDir.getAbsolutePath();
             FileManager.createFileWithContent(folder + REPORT_NAME, wholeReport);
         } catch (Exception e) {
-            e.printStackTrace();
-            LOGGER.error(e.getMessage(), e);
+            LOGGER.error("generateTestReport failure", e);
         }
     }
 
