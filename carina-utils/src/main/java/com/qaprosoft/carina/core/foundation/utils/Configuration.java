@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -162,6 +162,8 @@ public class Configuration {
         CORE_LOG_LEVEL("core_log_level"),
         
         CORE_LOG_PACKAGES("core_log_packages"),
+        
+        ARTIFACTS_EXPIRATION_SECONDS("artifacts_expiration_seconds"),
 
         LOG_ALL_JSON("log_all_json"),
 
@@ -215,9 +217,6 @@ public class Configuration {
 
         S3_LOCAL_STORAGE("s3_local_storage"),
 
-        // Amazon-Screenshot
-        S3_SAVE_SCREENSHOTS("s3_save_screenshots"),
-
         // HockeyApp token
         HOCKEYAPP_TOKEN("hockeyapp_token"),
 
@@ -247,7 +246,32 @@ public class Configuration {
 
         DEFAULT_DEVICE_TIME_FORMAT("default_device_time_format"),
 
-        DEFAULT_DEVICE_LANGUAGE("default_device_language");
+        DEFAULT_DEVICE_LANGUAGE("default_device_language"),
+        
+        //For screen recording
+        ANDROID_SCREEN_RECORDING_SIZE("android_screen_record_size"),
+        
+        ANDROID_SCREEN_RECORDING_BITRATE("android_screen_record_bitrate"),
+        
+        ANDROID_ENABLE_BUG_REPORT("android_enable_bug_report"),
+        
+        IOS_SCREEN_RECORDING_QUALITY("ios_screen_record_quality"),
+        
+        IOS_SCREEN_RECORDING_CODEC("ios_screen_record_codec"),
+        
+        IOS_SCREEN_RECORDING_FPS("ios_screen_record_fps"),
+        
+        SCREEN_RECORD_DURATION("screen_record_duration"),
+        
+        VIDEO_SCALE("video_scale"),
+
+        // Ignore SSL
+        IGNORE_SSL("ignore_ssl"),
+
+        // Test Execution Filter rules
+        TEST_RUN_RULES("test_run_rules"),
+        
+        HUB_MODE("hub_mode");
 
         private final String key;
 

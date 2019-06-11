@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@ import java.lang.annotation.Annotation;
 import java.util.Arrays;
 import java.util.Map;
 
+import com.qaprosoft.carina.core.foundation.dataprovider.parser.SpreadsheetParser;
 import org.testng.ITestContext;
 import org.testng.ITestNGMethod;
 
@@ -45,8 +46,9 @@ public class XlsDataProvider extends BaseDataProvider {
         DSBean dsBean = new DSBean(parameters, context
                 .getCurrentXmlTest().getAllParameters());
 
-        XLSTable dsData = XLSParser.parseSpreadSheet(dsBean.getDsFile(),
-                dsBean.getXlsSheet(), dsBean.getExecuteColumn(), dsBean.getExecuteValue());
+        XLSTable dsData = dsBean.isSpreadsheet() ?
+                SpreadsheetParser.parseSpreadSheet(dsBean.getDsFile(), dsBean.getXlsSheet(), dsBean.getExecuteColumn(), dsBean.getExecuteValue()) :
+                XLSParser.parseSpreadSheet(dsBean.getDsFile(), dsBean.getXlsSheet(), dsBean.getExecuteColumn(), dsBean.getExecuteValue());
 
         argsList = dsBean.getArgs();
         staticArgsList = dsBean.getStaticArgs();

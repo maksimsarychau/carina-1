@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,11 @@ package com.qaprosoft.carina.core.foundation.webdriver.core.factory;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.UUID;
 
 import org.apache.commons.collections.MapUtils;
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
 import org.openqa.selenium.Capabilities;
 import org.openqa.selenium.WebDriver;
@@ -120,7 +122,7 @@ public abstract class AbstractFactory {
         	artifact.setTestId((Long) res.getAttribute("ztid"));
         }
         artifact.setLink(String.format(R.CONFIG.get("screen_record_host"), videoName));
-        artifact.setExpiresIn(R.CONFIG.getInt("artifacts_expiration_seconds"));
+        artifact.setExpiresIn(Configuration.getInt(Configuration.Parameter.ARTIFACTS_EXPIRATION_SECONDS));
         return artifact;
     }
     
@@ -137,5 +139,15 @@ public abstract class AbstractFactory {
 			}
 		}
 		return isEnabled;
+	}
+	
+	/**
+	 * Gets video name from configuration or generates a random one.
+	 * 
+	 * @return video recording name
+	 */
+	protected String getVideoName() {
+		String videoName = R.CONFIG.get("capabilities.videoName");
+		return !StringUtils.isEmpty(videoName) ? videoName : UUID.randomUUID().toString() + ".mp4";
 	}
 }

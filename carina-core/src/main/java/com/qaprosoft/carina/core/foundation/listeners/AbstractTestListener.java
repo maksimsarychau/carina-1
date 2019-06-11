@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,13 +24,10 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Logger;
-import org.openqa.selenium.WebDriver;
-import org.openqa.selenium.support.events.EventFiringWebDriver;
 import org.testng.IRetryAnalyzer;
 import org.testng.ITestContext;
 import org.testng.ITestResult;
@@ -52,11 +49,8 @@ import com.qaprosoft.carina.core.foundation.utils.ParameterGenerator;
 import com.qaprosoft.carina.core.foundation.utils.R;
 import com.qaprosoft.carina.core.foundation.utils.StringGenerator;
 import com.qaprosoft.carina.core.foundation.utils.naming.TestNamingUtil;
-import com.qaprosoft.carina.core.foundation.webdriver.CarinaDriver;
 import com.qaprosoft.carina.core.foundation.webdriver.IDriverPool;
-import com.qaprosoft.carina.core.foundation.webdriver.Screenshot;
 import com.qaprosoft.carina.core.foundation.webdriver.device.Device;
-import com.qaprosoft.carina.core.foundation.webdriver.device.DevicePool;
 
 @SuppressWarnings("deprecation")
 public class AbstractTestListener extends TestListenerAdapter implements IDriverPool {
@@ -91,9 +85,6 @@ public class AbstractTestListener extends TestListenerAdapter implements IDriver
         String test = TestNamingUtil.getCanonicalTestName(result);
 
         String errorMessage = getFailureReason(result);
-
-        takeScreenshot(result, "TEST FAILED - " + errorMessage);
-
         String deviceName = getDeviceName();
 
         // TODO: remove hard-coded text
@@ -118,8 +109,6 @@ public class AbstractTestListener extends TestListenerAdapter implements IDriver
         String test = TestNamingUtil.getCanonicalTestName(result);
 
         String errorMessage = getFailureReason(result);
-
-        takeScreenshot(result, "TEST FAILED - " + errorMessage);
 
         String deviceName = getDeviceName();
 
@@ -189,8 +178,8 @@ public class AbstractTestListener extends TestListenerAdapter implements IDriver
     }
 
     private String getDeviceName() {
-        String deviceName = DevicePool.getDevice().getName();
-        String deviceUdid = DevicePool.getDevice().getUdid();
+        String deviceName = IDriverPool.getDefaultDevice().getName();
+        String deviceUdid = IDriverPool.getDefaultDevice().getUdid();
 
         if (!deviceName.isEmpty() && !deviceUdid.isEmpty()) {
             deviceName = deviceName + " - " + deviceUdid;
@@ -212,7 +201,7 @@ public class AbstractTestListener extends TestListenerAdapter implements IDriver
         //Artifacts.add("Demo", ReportContext.getTestScreenshotsLink(test));
         
         // device log
-        Device device = DevicePool.getDevice();
+        Device device = IDriverPool.getDefaultDevice();
         if (!device.isNull()) {
             LOGGER.debug("Device isn't null additional artifacts will be extracted.");
             File sysLogFile = device.saveSysLog();
@@ -263,7 +252,6 @@ public class AbstractTestListener extends TestListenerAdapter implements IDriver
         // closeLogAppender(test);
 
         String errorMessage = getFailureReason(result);
-        takeScreenshot(result, "CONFIGURATION FAILED - " + errorMessage);
 
         TestResultItem resultItem = createTestResult(result, TestResultType.FAIL, errorMessage,
                 result.getMethod().getDescription());
@@ -623,22 +611,4 @@ public class AbstractTestListener extends TestListenerAdapter implements IDriver
         configFailures.set(resultItem);
     }
 
-    private String takeScreenshot(ITestResult result, String msg) {
-        String screenId = "";
-
-        ConcurrentHashMap<String, CarinaDriver> drivers = getDrivers();
-
-        for (Map.Entry<String, CarinaDriver> entry : drivers.entrySet()) {
-            String driverName = entry.getKey();
-            WebDriver drv = entry.getValue().getDriver();
-
-            if (drv instanceof EventFiringWebDriver) {
-                drv = ((EventFiringWebDriver) drv).getWrappedDriver();
-            }
-            
-            screenId = Screenshot.captureFailure(drv, driverName + ": " + msg); // in case of failure
-        }
-        return screenId;
-    }
-    
 }

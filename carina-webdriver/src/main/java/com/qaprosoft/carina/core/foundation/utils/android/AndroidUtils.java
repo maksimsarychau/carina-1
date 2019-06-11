@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -44,9 +44,7 @@ import io.appium.java_client.touch.offset.PointOption;
 import io.appium.java_client.windows.PressesKeyCode;
 
 /**
- * Useful Android utilities. For usage: import
- * com.qaprosoft.carina.core.foundation.utils.android.AndroidUtils;
- *
+ * @deprecated use {@link com.qaprosoft.carina.core.foundation.utils.android.IAndroidUtils()} instead.
  */
 public class AndroidUtils extends MobileUtils {
 

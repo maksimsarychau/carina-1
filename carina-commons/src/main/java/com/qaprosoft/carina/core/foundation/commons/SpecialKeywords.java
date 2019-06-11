@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,12 +15,15 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.commons;
 
+import java.util.UUID;
+
 /**
  * Special keywords used in framework.
  * 
  * @author Alex Khursevich
  */
 public class SpecialKeywords {
+    public static final String TEST_RUN_ID = java.util.UUID.randomUUID().toString();
     public static final String IGNORE = "$ignore";
     public static final String GENERATE = "\\{generate:\\d*\\}";
     public static final String GENERATE_UUID = "\\{generate_uuid\\}";
@@ -157,6 +160,9 @@ public class SpecialKeywords {
     public static final String MOBILE_PROXY_PORT = "capabilities.proxyPort";
     
     public static final String  SLOT_CAPABILITIES = "slotCapabilities";
+    
+    public static final String APP_PACKAGE = "appPackage";
+    public static final String BUNDLE_ID = "CFBundleIdentifier";
 
 
     // ------------- STF PROPERTIES ---------------------------------
@@ -168,4 +174,26 @@ public class SpecialKeywords {
     // ------------- qTEST PROPERTIES -------------------------------
     public static final String QTEST_TESTCASE_UUID = "QTEST_TESTCASE_UUID";
     public static final String QTEST_PROJECT_ID = "qTestProjectId";
+
+
+    // ------------- TEST EXECUTION FILTERS CONSTANTS ---------------
+    public static final String RULE_FILTER_VALUE_SPLITTER = "=>";
+    public static final String RULE_FILTER_SPLITTER = ";;";
+    public static final String RULE_FILTER_AND_CONDITION = "&&";
+
+
+    // ------------- Mobile screenshots cutting strategies configuration  ---------------
+    public static final int DEFAULT_SCROLL_TIMEOUT = 100;
+    public static final int DEFAULT_BLOCK = 0;
+    public static final int DEFAULT_IOS_HEADER = 74;
+    public static final int IPAD_HEADER = 102;
+    public static final int IPHONE_X_HEADER = 95;
+    public static final int IPHONE_PLUS_HEADER = 82;
+    public static final int ALTERNATIVE_IOS_FOOTER = 42;
+    public static final float DEFAULT_DPR= 2.0F;
+    public static final float IPHONE_X_DPR= 3.0F;
+    public static final int DEFAULT_WIDTH= 375;
+    public static final int DEFAULT_PLUS_WIDTH= 414;
+    public static final int DEFAULT_IPAD_WIDTH= 768;
+    public static final int DEFAULT_SE_WIDTH= 320;
 }

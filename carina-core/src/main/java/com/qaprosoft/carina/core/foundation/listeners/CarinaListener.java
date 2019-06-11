@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,6 +24,7 @@ import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -32,6 +33,8 @@ import org.apache.log4j.Category;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.support.events.EventFiringWebDriver;
 import org.testng.Assert;
 import org.testng.ISuite;
 import org.testng.ISuiteListener;
@@ -52,7 +55,6 @@ import com.qaprosoft.amazon.AmazonS3Manager;
 import com.qaprosoft.carina.browsermobproxy.ProxyPool;
 import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
 import com.qaprosoft.carina.core.foundation.jira.Jira;
-import com.qaprosoft.carina.core.foundation.report.Artifacts;
 import com.qaprosoft.carina.core.foundation.report.ReportContext;
 import com.qaprosoft.carina.core.foundation.report.TestResultItem;
 import com.qaprosoft.carina.core.foundation.report.TestResultType;
@@ -65,17 +67,19 @@ import com.qaprosoft.carina.core.foundation.utils.DateUtils;
 import com.qaprosoft.carina.core.foundation.utils.JsonUtils;
 import com.qaprosoft.carina.core.foundation.utils.Messager;
 import com.qaprosoft.carina.core.foundation.utils.R;
+import com.qaprosoft.carina.core.foundation.utils.async.AsyncOperation;
 import com.qaprosoft.carina.core.foundation.utils.metadata.MetadataCollector;
 import com.qaprosoft.carina.core.foundation.utils.metadata.model.ElementsInfo;
 import com.qaprosoft.carina.core.foundation.utils.resources.I18N;
 import com.qaprosoft.carina.core.foundation.utils.resources.L10N;
 import com.qaprosoft.carina.core.foundation.utils.resources.L10Nparser;
 import com.qaprosoft.carina.core.foundation.webdriver.CarinaDriver;
+import com.qaprosoft.carina.core.foundation.webdriver.IDriverPool;
+import com.qaprosoft.carina.core.foundation.webdriver.Screenshot;
 import com.qaprosoft.carina.core.foundation.webdriver.TestPhase;
 import com.qaprosoft.carina.core.foundation.webdriver.TestPhase.Phase;
 import com.qaprosoft.carina.core.foundation.webdriver.core.capability.CapabilitiesLoader;
 import com.qaprosoft.carina.core.foundation.webdriver.device.Device;
-import com.qaprosoft.carina.core.foundation.webdriver.device.DevicePool;
 import com.qaprosoft.hockeyapp.HockeyAppManager;
 
 /*
@@ -90,6 +94,8 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
 
     protected static final String SUITE_TITLE = "%s%s%s - %s (%s%s)";
     protected static final String XML_SUITE_NAME = " (%s)";
+    
+    protected static boolean automaticDriversCleanup = true; 
 
     static {
         try {
@@ -236,6 +242,14 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
             TestPhase.setActivePhase(Phase.AFTER_SUITE);
         }
     }
+    
+    @Override
+    public void onConfigurationFailure(ITestResult result) {
+        String errorMessage = getFailureReason(result);
+        takeScreenshot(result, "CONFIGURATION FAILED - " + errorMessage);
+
+        super.onConfigurationFailure(result);
+    }
 
     @Override
     public void onTestStart(ITestResult result) {
@@ -258,26 +272,37 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
 
     @Override
     public void onTestFailure(ITestResult result) {
+        String errorMessage = getFailureReason(result);
+        takeScreenshot(result, "TEST FAILED - " + errorMessage);
+        
         onTestFinish(result);
         super.onTestFailure(result);
     }
 
     @Override
     public void onTestSkipped(ITestResult result) {
+        String errorMessage = getFailureReason(result);
+        takeScreenshot(result, "TEST FAILED - " + errorMessage);
+        
         onTestFinish(result);
         super.onTestSkipped(result);
     }
 
     private boolean hasDependencies(ITestResult result) {
         String methodName = result.getMethod().getMethodName();
-        LOGGER.debug("current method: " + methodName);
+        String className = result.getMethod().getTestClass().getName();
+        LOGGER.debug("current method: " + className + "." + methodName);
 
         // analyze all suite methods and return true if any of them depends on
         // existing method
         List<ITestNGMethod> methods = result.getTestContext().getSuite().getAllMethods();
         for (ITestNGMethod method : methods) {
             LOGGER.debug("analyze method for dependency: " + method.getMethodName());
-            if (Arrays.asList(method.getMethodsDependedUpon()).contains(methodName)) {
+            
+            List<String> dependencies = Arrays.asList(method.getMethodsDependedUpon());
+
+            if (dependencies.contains(methodName) ||
+                    dependencies.contains(className + "." + methodName)) {
                 return true;
             }
         }
@@ -286,9 +311,10 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
 
     private void onTestFinish(ITestResult result) {
         try {
-            if (!hasDependencies(result)) {
-                quitDrivers(Phase.BEFORE_METHOD);
-                quitDrivers(Phase.METHOD);
+            LOGGER.debug("Test result is : " + result.getStatus());
+            // result status == 2 means failure, status == 3 means skip. We need to quit driver anyway for failure and skip
+            if ((automaticDriversCleanup && !hasDependencies(result)) || result.getStatus() == 2 || result.getStatus() == 3) {
+                quitDrivers(Phase.BEFORE_METHOD, Phase.METHOD);
             }
 
             // TODO: improve later removing duplicates with AbstractTestListener
@@ -319,8 +345,6 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
             // clear jira tickets to be sure that next test is not affected.
             Jira.clearTickets();
 
-            Artifacts.clearArtifacts();
-
         } catch (Exception e) {
             LOGGER.error("Exception in CarinaListener->onTestFinish!", e);
         }
@@ -330,9 +354,9 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
     public void onFinish(ITestContext context) {
         super.onFinish(context);
 
-        // [VD] seems like useless after movemevt driver quite onto afterMethod
-        // phase
-        // quitDrivers(Phase.BEFORE_CLASS);
+        // [SZ] it's still needed to close driver from BeforeClass stage.
+        // Otherwise it could be potentially used in other test classes 
+        quitDrivers(Phase.BEFORE_CLASS);
 
         LOGGER.debug("CarinaListener->onFinish(context): " + context.getName());
 
@@ -405,17 +429,26 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
         } catch (Exception e) {
             LOGGER.error("Exception in CarinaListener->onFinish(ISuite suite)", e);
         } finally {
-            // do nothing
+            // wait until all async  operations (i.e. artifacts uploading) are finished
+            AsyncOperation.waitUntilFinish(30);
         }
+    }
+    
+    /**
+     * Disable automatic drivers cleanup after each TestMethod and switch to controlled by tests itself.
+     * But anyway all drivers will be closed forcibly as only suite is finished or aborted 
+     */
+    public static void disableDriversCleanup() {
+        automaticDriversCleanup = false;
     }
 
     // TODO: remove this private method
     private String getDeviceName() {
         String deviceName = "Desktop";
 
-        if (!DevicePool.getDevice().isNull()) {
+        if (!IDriverPool.getDefaultDevice().isNull()) {
             // Samsung - Android 4.4.2; iPhone - iOS 7
-            Device device = DevicePool.getDevice();
+            Device device = IDriverPool.getDefaultDevice();
             String deviceTemplate = "%s - %s %s";
             deviceName = String.format(deviceTemplate, device.getName(), device.getOs(), device.getOsVersion());
         }
@@ -746,6 +779,24 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
             includes.add(new XmlInclude(eachMethod));
         }
         return includes;
+    }
+    
+    private String takeScreenshot(ITestResult result, String msg) {
+        String screenId = "";
+
+        ConcurrentHashMap<String, CarinaDriver> drivers = getDrivers();
+
+        for (Map.Entry<String, CarinaDriver> entry : drivers.entrySet()) {
+            String driverName = entry.getKey();
+            WebDriver drv = entry.getValue().getDriver();
+
+            if (drv instanceof EventFiringWebDriver) {
+                drv = ((EventFiringWebDriver) drv).getWrappedDriver();
+            }
+            
+            screenId = Screenshot.captureFailure(drv, driverName + ": " + msg); // in case of failure
+        }
+        return screenId;
     }
 
     public static class ShutdownHook extends Thread {

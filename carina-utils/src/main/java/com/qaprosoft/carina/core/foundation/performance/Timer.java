@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,11 +37,26 @@ public class Timer {
      *            IPerformanceOperation.
      */
     public static synchronized void start(IPerformanceOperation operation) {
+        start(operation, "");
+    }
+    
+    /**
+     * Start timer to track IPerformanceOperation action using extra key.
+     * 
+     * @param operation
+     *            IPerformanceOperation.
+     * @param key
+     *            String.
+     */
+    public static synchronized void start(IPerformanceOperation operation, String key) {
+        String operationKey =  operation.getKey() + key;
         Map<String, Long> testTimer = getTimer();
-        if (testTimer.containsKey(operation.getKey())) {
-            throw new RuntimeException("Operation already started: " + operation.getKey());
+        if (testTimer.containsKey(operationKey)) {
+            // do not put new time as the same operation already started.
+            LOGGER.error("Operation already started: " + operationKey);
+        } else {
+            testTimer.put(operationKey, Calendar.getInstance().getTimeInMillis());
         }
-        testTimer.put(operation.getKey(), Calendar.getInstance().getTimeInMillis());
     }
 
     /**
@@ -52,39 +67,53 @@ public class Timer {
      * @return long elapsedTime from last start/stop.
      */
     public static synchronized long stop(IPerformanceOperation operation) {
+        return stop(operation, "");
+    }
+    
+    /**
+     * Stop timer and calculate summarized execution time for the action using extra key
+     * 
+     * @param operation
+     *            IPerformanceOperation.
+     * @param key
+     *            String.
+     * @return long elapsedTime from last start/stop.
+     */
+    public static synchronized long stop(IPerformanceOperation operation, String key) {
+        String operationKey =  operation.getKey() + key;
         Map<String, Long> testTimer = getTimer();
-        if (!testTimer.containsKey(operation.getKey())) {
+        if (!testTimer.containsKey(operationKey)) {
 			// TODO: current exception could stop tests execution which is
 			// inappropriate. Think about error'ing only
 //            Disabled due to socket issue
-//            throw new RuntimeException("Operation not started: " + operation.getKey());
-            LOGGER.error("Operation not started: " + operation.getKey());
-            testTimer.remove(operation.getKey());
+//            throw new RuntimeException("Operation not started: " + operationKey);
+            LOGGER.error("Operation not started: " + operationKey);
+            testTimer.remove(operationKey);
             return 0;
         }
         
         Map<String, Long> testMertrics = getMetrics();
         long capturedTime = 0;
-        if (testMertrics.get(operation.getKey()) != null) {
+        if (testMertrics.get(operationKey) != null) {
             	//summarize operation time
-            	capturedTime = testMertrics.get(operation.getKey());
+            	capturedTime = testMertrics.get(operationKey);
         }
         
-        long elapsedTime = testTimer.get(operation.getKey());
-        testMertrics.put(operation.getKey(), capturedTime + Calendar.getInstance().getTimeInMillis() - elapsedTime);
+        long elapsedTime = testTimer.get(operationKey);
+        testMertrics.put(operationKey, capturedTime + Calendar.getInstance().getTimeInMillis() - elapsedTime);
         //remove stopped timer data
-        testTimer.remove(operation.getKey());
+        testTimer.remove(operationKey);
         
         return elapsedTime;
     }
 
 
-    //TODO: investigate if this caal from ZafiraConfigurator could remove "ACTION_NAME.RUN_SUITE" data 
+    //TODO: investigate if this call from ZafiraConfigurator could remove "ACTION_NAME.RUN_SUITE" data 
     public static synchronized Map<String, Long> readAndClear() {
         Map<String, Long> testTimer = getTimer();
         for (String key : testTimer.keySet()) {
             // timer not stopped
-            LOGGER.error("Timer not stopped for operation: " + key);
+            LOGGER.debug("Timer not stopped for operation: " + key);
         }
 
         Map<String, Long> testMertrics = getMetrics();

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,19 +21,24 @@ import com.qaprosoft.carina.core.foundation.utils.R;
 import com.qaprosoft.carina.proxy.SystemProxy;
 import net.lightbody.bmp.BrowserMobProxy;
 import net.lightbody.bmp.proxy.CaptureType;
+import org.apache.log4j.Logger;
 import org.testng.Assert;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeClass;
+import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 
+import javax.net.ssl.SSLContext;
 import java.io.IOException;
 import java.net.HttpURLConnection;
+import java.net.Proxy;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 public class BrowserMobTest {
+    protected static final Logger LOGGER = Logger.getLogger(BrowserMobTest.class);
     private static String header = "my_header";
     private static String headerValue = "my_value";
     private static String testUrl = "https://ci.qaprosoft.com";
@@ -42,6 +47,7 @@ public class BrowserMobTest {
 
     @BeforeClass(alwaysRun = true)
     public void beforeClass() {
+        R.CONFIG.put("core_log_level", "DEBUG");
         R.CONFIG.put("browsermob_proxy", "true");
         R.CONFIG.put("browsermob_port", "0");
         R.CONFIG.put("proxy_set_to_system", "true");
@@ -88,9 +94,12 @@ public class BrowserMobTest {
         Assert.assertFalse(ProxyPool.isProxyRegistered(), "Proxy wasn't stopped!");
     }
 
-/*    @Test
+    @Test
     public void testBrowserModProxyResponseFiltering() {
         List<String> content = new ArrayList<>();
+        LocalTrustStoreBuilder localTrustStoreBuilder = new LocalTrustStoreBuilder();
+        SSLContext sslContext = localTrustStoreBuilder.createSSLContext();
+        SSLContext.setDefault(sslContext);
 
         ProxyPool.setupBrowserMobProxy();
         SystemProxy.setupProxy();
@@ -99,6 +108,7 @@ public class BrowserMobTest {
         proxy.newHar();
 
         proxy.addResponseFilter((request, contents, messageInfo) -> {
+            LOGGER.info("Requested resource caught contents: " + contents.getTextContents());
             if (contents.getTextContents().contains(filterKey)) {
                 content.add(contents.getTextContents());
             }
@@ -109,7 +119,30 @@ public class BrowserMobTest {
         Assert.assertNotNull(proxy.getHar(), "Har is unexpectedly null!");
         Assert.assertEquals(content.size(), 1,"Filtered response number is not as expected!");
         Assert.assertTrue(content.get(0).contains(filterKey), "Response doesn't contain expected key!");
-    }*/
+    }
+
+    @DataProvider(parallel = false)
+    public static Object[][] dataProviderForMultiThreadProxy() {
+        return new Object[][] {
+                { "Test1" },
+                { "Test2" } };
+    }
+
+    @Test(dataProvider = "dataProviderForMultiThreadProxy")
+    public void testRegisterProxy(String arg) {
+        ProxyPool.setupBrowserMobProxy();
+        int tempPort = ProxyPool.getProxy().getPort();
+        ProxyPool.stopProxy();
+        BrowserMobProxy proxy = ProxyPool.createProxy();
+        proxy.setTrustAllServers(true);
+        proxy.setMitmDisabled(false);
+        ProxyPool.registerProxy(proxy);
+
+        ProxyPool.startProxy(tempPort);
+        int actualPort = ProxyPool.getProxy().getPort();
+        LOGGER.info(String.format("Checking Ports Before (%s) After (%s)", tempPort, actualPort));
+        Assert.assertEquals(tempPort, actualPort, "Proxy Port before, after do not match on current thread");
+    }
 
     private void initialize() {
         ProxyPool.setupBrowserMobProxy();

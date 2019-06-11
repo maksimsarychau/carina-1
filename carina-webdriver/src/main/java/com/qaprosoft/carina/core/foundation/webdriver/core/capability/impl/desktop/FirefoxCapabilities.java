@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package com.qaprosoft.carina.core.foundation.webdriver.core.capability.impl.desk
 import java.util.ArrayList;
 
 import org.openqa.selenium.firefox.FirefoxDriver;
+import org.openqa.selenium.firefox.FirefoxOptions;
 import org.openqa.selenium.firefox.FirefoxProfile;
 import org.openqa.selenium.net.PortProber;
 import org.openqa.selenium.remote.BrowserType;
@@ -40,10 +41,11 @@ public class FirefoxCapabilities extends AbstractCapabilities {
     }
 
     public DesiredCapabilities getCapability(String testName, FirefoxProfile profile) {
-        DesiredCapabilities capabilities = DesiredCapabilities.firefox();
+        DesiredCapabilities capabilities = new DesiredCapabilities();
         capabilities = initBaseCapabilities(capabilities, BrowserType.FIREFOX, testName);
         capabilities.setCapability(CapabilityType.TAKES_SCREENSHOT, false);
-        capabilities.setCapability(FirefoxDriver.PROFILE, profile);
+        FirefoxOptions options = new FirefoxOptions().setProfile(profile);
+        capabilities.setCapability(FirefoxOptions.FIREFOX_OPTIONS,options);
         return capabilities;
     }
 

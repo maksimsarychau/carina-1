@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,8 +37,8 @@ import com.qaprosoft.carina.core.foundation.utils.ownership.Ownership;
 import com.qaprosoft.carina.core.foundation.utils.ownership.Ownership.OwnerType;
 import com.qaprosoft.carina.core.foundation.utils.tag.PriorityManager;
 import com.qaprosoft.carina.core.foundation.utils.tag.TagManager;
+import com.qaprosoft.carina.core.foundation.webdriver.IDriverPool;
 import com.qaprosoft.carina.core.foundation.webdriver.device.Device;
-import com.qaprosoft.carina.core.foundation.webdriver.device.DevicePool;
 import com.qaprosoft.zafira.config.IConfigurator;
 import com.qaprosoft.zafira.models.dto.TagType;
 import com.qaprosoft.zafira.models.dto.TestArtifactType;
@@ -75,7 +75,7 @@ public class ZafiraConfigurator implements IConfigurator, ITestRailManager, IQTe
         long threadId = Thread.currentThread().getId();
 
         // add custom arguments from current mobile device
-        Device device = DevicePool.getDevice();
+        Device device = IDriverPool.getDefaultDevice();
         if (!device.getName().isEmpty()) {
             String deviceName = device.getName();
             String deviceOs = device.getOs();
@@ -170,10 +170,10 @@ public class ZafiraConfigurator implements IConfigurator, ITestRailManager, IQTe
         }
 
         Map<String, String> testTags = TagManager.getTags(test);
-        testTags.entrySet().stream().forEach((entry) -> {
+        testTags.forEach((name, value) -> {
             TagType tagEntry = new TagType();
-            tagEntry.setName(entry.getKey());
-            tagEntry.setValue(entry.getValue());
+            tagEntry.setName(name);
+            tagEntry.setValue(value);
             tags.add(tagEntry);
         });
 
@@ -195,6 +195,10 @@ public class ZafiraConfigurator implements IConfigurator, ITestRailManager, IQTe
         return Artifacts.getArtifacts();
     }
 
+    @Override
+    public void clearArtifacts() {
+        Artifacts.clearArtifacts();
+    }
 
     //Moved them separately for future easier reusing if getTestTags will be overridden.
     //TODO: Should we make them public or protected?

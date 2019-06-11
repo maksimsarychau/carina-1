@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,15 @@ import java.lang.annotation.Target;
 public @interface XlsDataSourceParameters {
     String className() default "com.qaprosoft.carina.core.foundation.dataprovider.core.impl.XlsDataProvider";
 
+    /**
+     * Is mutually exclusive with spreadsheetId
+     */
     String path() default "";
+
+    /**
+     * Is mutually exclusive with path
+     */
+    String spreadsheetId() default "";
 
     String sheet() default "";
 

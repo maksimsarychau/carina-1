@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -89,18 +89,20 @@ public abstract class AbstractCapabilities {
                 }
             }
         }
-
+        capabilities.setCapability("carinaTestRunId", SpecialKeywords.TEST_RUN_ID);
         return capabilities;
     }
 
     protected Proxy setupProxy() {
         ProxyPool.setupBrowserMobProxy();
         SystemProxy.setupProxy();
-        
+
         String proxyHost = Configuration.get(Parameter.PROXY_HOST);
         String proxyPort = Configuration.get(Parameter.PROXY_PORT);
+        if (Configuration.get(Parameter.BROWSERMOB_PROXY).equals("true")) {
+            proxyPort = Integer.toString(ProxyPool.getProxyPort());
+        }
         List<String> protocols = Arrays.asList(Configuration.get(Parameter.PROXY_PROTOCOLS).split("[\\s,]+"));
-
 
         if (proxyHost != null && !proxyHost.isEmpty() && proxyPort != null && !proxyPort.isEmpty()) {
 

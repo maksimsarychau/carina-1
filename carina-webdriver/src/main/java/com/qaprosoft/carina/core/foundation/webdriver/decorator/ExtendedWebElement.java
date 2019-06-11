@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,13 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.webdriver.decorator;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -41,7 +45,7 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.Actions;
-import org.openqa.selenium.interactions.internal.Locatable;
+import org.openqa.selenium.interactions.Locatable;
 import org.openqa.selenium.remote.LocalFileDetector;
 import org.openqa.selenium.remote.RemoteWebDriver;
 import org.openqa.selenium.remote.RemoteWebElement;
@@ -66,6 +70,7 @@ import com.qaprosoft.carina.core.foundation.utils.common.CommonUtils;
 import com.qaprosoft.carina.core.foundation.webdriver.IDriverPool;
 import com.qaprosoft.carina.core.foundation.webdriver.listener.DriverListener;
 import com.qaprosoft.carina.core.foundation.webdriver.locator.ExtendedElementLocator;
+import com.sun.jersey.core.util.Base64;
 
 import io.appium.java_client.MobileBy;
 import io.appium.java_client.android.AndroidDriver;
@@ -409,7 +414,11 @@ public class ExtendedWebElement {
         this.by = by;
     }
 
-    @Override
+	public void setSearchContext(SearchContext searchContext) {
+		this.searchContext = searchContext;
+	}
+
+	@Override
     public String toString() {
         return name;
     }
@@ -1024,7 +1033,11 @@ public class ExtendedWebElement {
      */
     public ExtendedWebElement findExtendedWebElement(final By by, String name, long timeout) {
         if (isPresent(by, timeout)) {
-        	return new ExtendedWebElement(getElement().findElement(by), name, by);
+			try {
+				return new ExtendedWebElement(getCachedElement().findElement(by), name, by);
+			} catch (StaleElementReferenceException e) {
+				return new ExtendedWebElement(getElement().findElement(by), name, by);
+			}
         } else {
         	throw new NoSuchElementException("Unable to find dynamic element using By: " + by.toString());
         }
@@ -1039,7 +1052,11 @@ public class ExtendedWebElement {
         List<WebElement> webElements = new ArrayList<WebElement>();
         
         if (isPresent(by, timeout)) {
-        	webElements = getElement().findElements(by);
+			try {
+				webElements = getCachedElement().findElements(by);
+			} catch (StaleElementReferenceException e) {
+				webElements = getElement().findElements(by);
+			}
         } else {
         	throw new NoSuchElementException("Unable to find dynamic elements using By: " + by.toString());
         }
@@ -1061,6 +1078,9 @@ public class ExtendedWebElement {
         return extendedWebElements;
     }
 
+    /**
+     * @deprecated As of release 6.x, replaced by {@link #click()}. Can be used only for Web where JavascriptExecutor is supported.
+     */
     @Deprecated
     public void tapWithCoordinates(double x, double y) {
         HashMap<String, Double> tapObject = new HashMap<String, Double>();
@@ -1144,6 +1164,21 @@ public class ExtendedWebElement {
 
         if (locator.startsWith("By.AccessibilityId: ")) {
             by = MobileBy.AccessibilityId(String.format(StringUtils.remove(locator, "By.AccessibilityId: "), objects));
+        }
+        
+        if (locator.startsWith("By.Image: ")) {
+            String formattedLocator = String.format(StringUtils.remove(locator, "By.Image: "), objects);
+            Path path = Paths.get(formattedLocator);
+            LOGGER.debug("Formatted locator is : " + formattedLocator);
+            String base64image;
+            try {
+                base64image = new String(Base64.encode(Files.readAllBytes(path)));
+            } catch (IOException e) {
+                throw new RuntimeException(
+                        "Error while reading image file after formatting. Formatted locator : " + formattedLocator, e);
+            }
+            LOGGER.debug("Base64 image representation has benn successfully obtained after formatting.");
+            by = MobileBy.image(base64image);
         }
         return new ExtendedWebElement(by, name, getDriver());
     }
@@ -1546,9 +1581,15 @@ public class ExtendedWebElement {
 			public void doType(String text) {
 				final String decryptedText = cryptoTool.decryptByPattern(text, CRYPTO_PATTERN);
 
-				DriverListener.setMessages(Messager.KEYS_CLEARED_IN_ELEMENT.getMessage(getName()),
-						Messager.KEYS_NOT_CLEARED_IN_ELEMENT.getMessage(getNameWithLocator()));
-				element.clear();
+/*				if (!element.getText().isEmpty()) {
+    				DriverListener.setMessages(Messager.KEYS_CLEARED_IN_ELEMENT.getMessage(getName()),
+    						Messager.KEYS_NOT_CLEARED_IN_ELEMENT.getMessage(getNameWithLocator()));
+    				element.clear();
+				}
+*/
+                DriverListener.setMessages(Messager.KEYS_CLEARED_IN_ELEMENT.getMessage(getName()),
+                        Messager.KEYS_NOT_CLEARED_IN_ELEMENT.getMessage(getNameWithLocator()));
+                element.clear();
 
 				String textLog = (!decryptedText.equals(text) ? "********" : text);
 
@@ -1796,9 +1837,25 @@ public class ExtendedWebElement {
         return resBy;
     }
     
-    private ExpectedCondition<?> getDefaultCondition(By myBy) {
+/*	private ExpectedCondition<?> getDefaultCondition(By myBy) {
         // generate the most popular wiatCondition to check if element visible or present
         return ExpectedConditions.or(ExpectedConditions.presenceOfElementLocated(myBy),
                 ExpectedConditions.visibilityOfElementLocated(myBy));
+    }*/
+
+    // old functionality to remove completely after successfull testing
+    private ExpectedCondition<?> getDefaultCondition(By myBy) {
+        // generate the most popular wiatCondition to check if element visible or present
+        ExpectedCondition<?> waitCondition = null;
+        if (element != null) {
+            waitCondition = ExpectedConditions.or(ExpectedConditions.presenceOfElementLocated(myBy),
+                    ExpectedConditions.visibilityOfElementLocated(myBy),
+                    ExpectedConditions.visibilityOf(element));
+        } else {
+            waitCondition = ExpectedConditions.or(ExpectedConditions.presenceOfElementLocated(myBy),
+                    ExpectedConditions.visibilityOfElementLocated(myBy));
+        }
+
+        return waitCondition;
     }
 }
