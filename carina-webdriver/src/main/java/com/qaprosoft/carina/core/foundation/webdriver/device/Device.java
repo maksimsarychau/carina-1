@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,12 +22,6 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
 
 import org.apache.commons.io.FileUtils;
@@ -38,6 +32,7 @@ import org.openqa.selenium.WebDriver;
 
 import com.qaprosoft.carina.commons.models.RemoteDevice;
 import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
+import com.qaprosoft.carina.core.foundation.performance.DRIVER_TYPE;
 import com.qaprosoft.carina.core.foundation.report.ReportContext;
 import com.qaprosoft.carina.core.foundation.utils.Configuration;
 import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
@@ -57,11 +52,13 @@ public class Device extends RemoteDevice implements IDriverPool {
      * Store udids of devices where related apps were uninstalled
      */
     private static List<String> clearedDeviceUdids = new ArrayList<>();
+    private boolean isStfEnabled;
 
     AdbExecutor executor = new AdbExecutor();
 
     public Device() {
         this("", "", "", "", "", "");
+        this.isStfEnabled = false;
     }
 
     public Device(String name, String type, String os, String osVersion, String udid, String remoteURL) {
@@ -129,11 +126,13 @@ public class Device extends RemoteDevice implements IDriverPool {
         setUdid(deviceUdid);
         
         String proxyPort = R.CONFIG.get(SpecialKeywords.MOBILE_PROXY_PORT);
-        if (capabilities.getCapability("proxy_port") != null) {
-            proxyPort = capabilities.getCapability("proxy_port").toString();
+        if (capabilities.getCapability(Parameter.PROXY_PORT.getKey()) != null) {
+            proxyPort = capabilities.getCapability(Parameter.PROXY_PORT.getKey()).toString();
         }
 
         setProxyPort(proxyPort);
+        
+        setCapabilities(capabilities);
     }
 
     public boolean isPhone() {
@@ -145,7 +144,7 @@ public class Device extends RemoteDevice implements IDriverPool {
     }
 
     public boolean isTv() {
-        return getType().equalsIgnoreCase(SpecialKeywords.TV);
+        return getType().equalsIgnoreCase(SpecialKeywords.TV) || getType().equalsIgnoreCase(SpecialKeywords.ANDROID_TV) || getType().equalsIgnoreCase(SpecialKeywords.TVOS);
     }
 
     public Type getDeviceType() {
@@ -162,11 +161,14 @@ public class Device extends RemoteDevice implements IDriverPool {
                 return Type.ANDROID_TV;
             }
             return Type.ANDROID_PHONE;
-        } else if (getOs().equalsIgnoreCase(SpecialKeywords.IOS) || getOs().equalsIgnoreCase(SpecialKeywords.MAC)) {
+        } else if (getOs().equalsIgnoreCase(SpecialKeywords.IOS) || getOs().equalsIgnoreCase(SpecialKeywords.MAC) || getOs().equalsIgnoreCase(SpecialKeywords.TVOS)) {
             if (isTablet()) {
                 return Type.IOS_TABLET;
             }
-            return Type.IOS_PHONE;
+            if (isTv()) {
+                return Type.APPLE_TV;
+            }
+                return Type.IOS_PHONE;
         }
         throw new RuntimeException("Incorrect driver type. Please, check config file for " + toString());
     }
@@ -177,7 +179,7 @@ public class Device extends RemoteDevice implements IDriverPool {
     }
 
     public boolean isNull() {
-        if (getName() == null) {
+        if (StringUtils.isEmpty(getName())) {
             return true;
         }
         return getName().isEmpty();
@@ -187,6 +189,11 @@ public class Device extends RemoteDevice implements IDriverPool {
         if (isNull())
             return;
 
+        if (isIOS())
+            return;
+        
+        isStfEnabled = true;
+        
         LOGGER.debug("adb connect " + getRemoteURL());
         String[] cmd = CmdLine.insertCommandsAfter(executor.getDefaultCmd(), "connect", getRemoteURL());
         executor.execute(cmd);
@@ -195,13 +202,12 @@ public class Device extends RemoteDevice implements IDriverPool {
         String[] cmd2 = CmdLine.insertCommandsAfter(executor.getDefaultCmd(), "devices");
         executor.execute(cmd2);
 
-        // TODO: add several attempt of connect until device appear among connected devices
-        // quick workaround to do double connect...
-        executor.execute(cmd);
-        executor.execute(cmd2);
     }
 
     public void disconnectRemote() {
+        if (!isStfEnabled)
+            return;
+        
         if (isNull())
             return;
 
@@ -543,112 +549,6 @@ public class Device extends RemoteDevice implements IDriverPool {
     }
     
     /**
-     * Extract sys log using adb
-     * 
-     * @return sys log
-     */
-    public String getSysLog() {
-        int extractionTimeout = 15;
-        
-        if (isNull()) {
-            return "";
-        }
-        
-        if (!DeviceType.Type.ANDROID_PHONE.getFamily().equalsIgnoreCase(getOs())) {
-            LOGGER.debug("Logcat log is empty since device is not Android");
-            return "";
-        }
-        LOGGER.debug("Extraction of sys log: " + getAdbName());
-
-        // launch extractor in separate thread to avoid possible hang out
-        ExecutorService executorService = Executors.newSingleThreadExecutor();
-        Future<String> future = executorService.submit(new Callable<String>() {
-
-         // adb -s UDID logcat -d
-            @Override
-            public String call() throws Exception {
-                LOGGER.debug("Start Syslog extraction");
-                String[] cmd = CmdLine.insertCommandsAfter(executor.getDefaultCmd(), "-s", getAdbName(), "logcat", "-d");
-                LOGGER.debug("Logcat log has been extracted.");
-                StringBuilder tempStr = new StringBuilder();
-                executor.execute(cmd).stream().forEach((k) -> tempStr.append(k.concat("\n")));
-                return tempStr.toString();
-            }
-            
-        });
-
-        try {
-            String logs = future.get(extractionTimeout, TimeUnit.SECONDS);
-            LOGGER.debug("Logcat logs: ".concat(logs));
-            return logs;
-        } catch (TimeoutException e) {
-            LOGGER.warn(String.format("Sys log hasn't been extracted in %d seconds.", extractionTimeout));
-            future.cancel(true);
-            return "Syslog hasn't been extracted in seconds. Operation was interrupted.";
-        } catch (Exception e) {
-//            TODO: add custom handlers for each exceptions based on type
-            LOGGER.warn("Unknown issue was fired. Empty logs will be used.", e);
-            return "";
-        }
-       
-//        return tempStr.toString();
-    }
-    
-    /**
-     * Clear sys log
-     */
-    public void clearSysLog() {
-        if (isNull()) {
-            return;
-        }
-        
-        if (!DeviceType.Type.ANDROID_PHONE.getFamily().equalsIgnoreCase(getOs())) {
-            LOGGER.debug("Logcat log won't be cleared since device is not Android");
-            return;
-        }
-
-		if (!isConnected()) {
-			//do not use new features if execution is not inside approved cloud
-			return;
-		}
-        
-        LOGGER.info(String.format("Test will be started on device: %s:%s", getName(), getAdbName()));
-        // adb -s UDID logcat -c
-        String[] cmd = CmdLine.insertCommandsAfter(executor.getDefaultCmd(), "-s", getAdbName(), "logcat", "-c");
-        executor.execute(cmd);
-        LOGGER.debug("Logcat logs were cleared.");
-    }
-    
-    /**
-     * Save logcat log for Android (logs will be uploaded in future as artifacts)
-     * TODO: for iOS
-     * 
-     * @return saved file
-     */
-    public File saveSysLog() {
-		if (!isConnected()) {
-			//do not use new features if execution is not inside approved cloud
-			return null;
-		}
-		LOGGER.debug("STF is enabled. Sys log will be extracted...");
-        String fileName = ReportContext.getTestDir() + "/logcat.log";
-        String log = getSysLog();
-        if (log.isEmpty()) {
-            return null;
-        }
-        
-        File file = null;
-        try {
-            file = new File(fileName);
-            FileUtils.writeStringToFile(file, log, Charset.defaultCharset());
-        } catch (IOException e) {
-            LOGGER.warn("Error has been occured during attempt to extract logcat log.", e);
-        }
-        LOGGER.debug("Logcat file path: ".concat(fileName));
-        return file;
-    }
-    
-    /**
      * Save xml layout of the application 
      * @param screenshotName - png file name to generate appropriate uix  
      * @return saved file
@@ -660,6 +560,7 @@ public class Device extends RemoteDevice implements IDriverPool {
         
 //        TODO: investigate with iOS: how does it work with iOS
 		if (!isConnected()) {
+		    LOGGER.debug("Device isConnected() returned false. Dump file won't be generated.");
 			//do not use new features if execution is not inside approved cloud
 			return null;
 		}
@@ -671,22 +572,48 @@ public class Device extends RemoteDevice implements IDriverPool {
         // TODO: investigate how to connect screenshot with xml dump: screenshot
         // return File -> Zip png and uix or move this logic to zafira
         
-        LOGGER.debug("UI dump generation...");
-        WebDriver driver = getDriver();
-        String fileName = ReportContext.getTestDir() + String.format("/%s.uix", screenshotName.replace(".png", ""));
-        String pageSource = driver.getPageSource();
-        pageSource = pageSource.replaceAll(SpecialKeywords.ANDROID_START_NODE, SpecialKeywords.ANDROID_START_UIX_NODE).
-                replaceAll(SpecialKeywords.ANDROID_END_NODE, SpecialKeywords.ANDROID_END_UIX_NODE);
-        
-        File file = null;
         try {
-            file = new File(fileName);
-            FileUtils.writeStringToFile(file, pageSource, Charset.forName("ASCII"));
-        } catch (IOException e) {
-            LOGGER.warn("Error has been met during attempt to extract xml tree.", e);
+            LOGGER.debug("UI dump generation...");
+            WebDriver driver = getDriver();
+            String fileName = ReportContext.getTestDir() + String.format("/%s.uix", screenshotName.replace(".png", ""));
+            String pageSource = driver.getPageSource();
+            pageSource = pageSource.replaceAll(SpecialKeywords.ANDROID_START_NODE, SpecialKeywords.ANDROID_START_UIX_NODE).
+                    replaceAll(SpecialKeywords.ANDROID_END_NODE, SpecialKeywords.ANDROID_END_UIX_NODE);
+            
+            File file = null;
+            try {
+                file = new File(fileName);
+                FileUtils.writeStringToFile(file, pageSource, Charset.forName("ASCII"));
+            } catch (IOException e) {
+                LOGGER.warn("Error has been met during attempt to extract xml tree.", e);
+            }
+            LOGGER.debug("XML file path: ".concat(fileName));
+            return file;
+        } catch (Exception e) {
+            LOGGER.error("Undefined failure during UiDump generation for Android device!", e);
         }
-        LOGGER.debug("XML file path: ".concat(fileName));
-        return file;
+        
+        return null;
+    }
+    
+    /**
+     * return unique ACTION_NAME for driver to measure selenium slave usage 
+     * @return WEB_DRIVER or MOBILE_DRIVER
+     */
+    public DRIVER_TYPE getMetricName() {
+        DRIVER_TYPE metricName = DRIVER_TYPE.WEB_DRIVER;
+        if (isMobile()) {
+            metricName = DRIVER_TYPE.MOBILE_DRIVER;
+        }
+        return metricName;
+    }
+    
+    private boolean isMobile() {
+        return SpecialKeywords.ANDROID.equalsIgnoreCase(getOs()) || SpecialKeywords.IOS.equalsIgnoreCase(getOs()) || SpecialKeywords.TVOS.equalsIgnoreCase(getOs());
+    }
+    
+    private boolean isIOS() {
+        return SpecialKeywords.IOS.equalsIgnoreCase(getOs()) || SpecialKeywords.TVOS.equalsIgnoreCase(getOs());
     }
 
     private boolean isConnected() {

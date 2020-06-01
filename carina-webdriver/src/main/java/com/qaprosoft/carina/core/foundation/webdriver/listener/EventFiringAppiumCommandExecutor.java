@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -41,6 +41,7 @@ import org.openqa.selenium.remote.service.DriverService;
 
 import com.google.common.base.Supplier;
 import com.google.common.base.Throwables;
+import com.qaprosoft.carina.core.foundation.webdriver.httpclient.HttpClientFactoryCustom;
 
 import io.appium.java_client.MobileCommand;
 import io.appium.java_client.remote.AppiumCommandExecutor;
@@ -54,7 +55,7 @@ import io.appium.java_client.remote.AppiumW3CHttpCommandCodec;
  */
 @SuppressWarnings({ "unchecked" })
 public class EventFiringAppiumCommandExecutor extends HttpCommandExecutor {
-
+    
     private final Optional<DriverService> serviceOptional;
 
     private List<IDriverCommandListener> listeners = new ArrayList<>();
@@ -82,16 +83,16 @@ public class EventFiringAppiumCommandExecutor extends HttpCommandExecutor {
 
     public EventFiringAppiumCommandExecutor(Map<String, CommandInfo> additionalCommands,
             URL addressOfRemoteServer) {
-        this(additionalCommands, addressOfRemoteServer, HttpClient.Factory.createDefault());
+        this(additionalCommands, addressOfRemoteServer, new HttpClientFactoryCustom());
     }
 
     public EventFiringAppiumCommandExecutor(Map<String, CommandInfo> additionalCommands,
             DriverService service) {
-        this(additionalCommands, service, HttpClient.Factory.createDefault());
+        this(additionalCommands, service, new HttpClientFactoryCustom());
     }
 
     public EventFiringAppiumCommandExecutor(URL addressOfRemoteServer) {
-        this(MobileCommand.commandRepository, addressOfRemoteServer, HttpClient.Factory.createDefault());
+        this(MobileCommand.commandRepository, addressOfRemoteServer, new HttpClientFactoryCustom());
     }
 
     private <B> B getPrivateFieldValue(String fieldName, Class<B> fieldType) {

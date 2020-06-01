@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import com.qaprosoft.carina.core.foundation.webdriver.decorator.ExtendedWebEleme
 
 public abstract class AbstractElementExtractor {
 
-    private Logger LOGGER = Logger.getLogger(AbstractElementExtractor.class);
+    private static final Logger LOGGER = Logger.getLogger(AbstractElementExtractor.class);
 
     public boolean isInside(Rectangle rect, int x, int y) {
         return rect.x <= x && rect.x + rect.width >= x && rect.y <= y && rect.y + rect.height >= y;

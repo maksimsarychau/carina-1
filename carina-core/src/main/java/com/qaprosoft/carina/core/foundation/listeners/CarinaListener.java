@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,25 +19,33 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.PrintWriter;
 import java.lang.reflect.Method;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
 
 import org.apache.commons.lang3.StringUtils;
 import org.apache.log4j.Category;
 import org.apache.log4j.Level;
 import org.apache.log4j.Logger;
 import org.apache.log4j.PropertyConfigurator;
-import org.openqa.selenium.WebDriverException;
+import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.support.events.EventFiringWebDriver;
 import org.testng.Assert;
 import org.testng.ISuite;
 import org.testng.ISuiteListener;
 import org.testng.ITestContext;
+import org.testng.ITestNGMethod;
 import org.testng.ITestResult;
 import org.testng.SkipException;
 import org.testng.TestListenerAdapter;
@@ -46,14 +54,17 @@ import org.testng.xml.XmlClass;
 import org.testng.xml.XmlInclude;
 import org.testng.xml.XmlSuite;
 import org.testng.xml.XmlTest;
+import org.w3c.dom.Document;
+import org.w3c.dom.NamedNodeMap;
+import org.w3c.dom.Node;
 
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.qaprosoft.amazon.AmazonS3Manager;
+import com.qaprosoft.appcenter.AppCenterManager;
 import com.qaprosoft.carina.browsermobproxy.ProxyPool;
 import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
 import com.qaprosoft.carina.core.foundation.jira.Jira;
-import com.qaprosoft.carina.core.foundation.report.Artifacts;
 import com.qaprosoft.carina.core.foundation.report.ReportContext;
 import com.qaprosoft.carina.core.foundation.report.TestResultItem;
 import com.qaprosoft.carina.core.foundation.report.TestResultType;
@@ -66,98 +77,103 @@ import com.qaprosoft.carina.core.foundation.utils.DateUtils;
 import com.qaprosoft.carina.core.foundation.utils.JsonUtils;
 import com.qaprosoft.carina.core.foundation.utils.Messager;
 import com.qaprosoft.carina.core.foundation.utils.R;
+import com.qaprosoft.carina.core.foundation.utils.common.CommonUtils;
+import com.qaprosoft.carina.core.foundation.utils.ftp.FtpUtils;
 import com.qaprosoft.carina.core.foundation.utils.metadata.MetadataCollector;
 import com.qaprosoft.carina.core.foundation.utils.metadata.model.ElementsInfo;
-import com.qaprosoft.carina.core.foundation.utils.resources.I18N;
 import com.qaprosoft.carina.core.foundation.utils.resources.L10N;
 import com.qaprosoft.carina.core.foundation.utils.resources.L10Nparser;
 import com.qaprosoft.carina.core.foundation.webdriver.CarinaDriver;
 import com.qaprosoft.carina.core.foundation.webdriver.IDriverPool;
+import com.qaprosoft.carina.core.foundation.webdriver.Screenshot;
 import com.qaprosoft.carina.core.foundation.webdriver.TestPhase;
 import com.qaprosoft.carina.core.foundation.webdriver.TestPhase.Phase;
 import com.qaprosoft.carina.core.foundation.webdriver.core.capability.CapabilitiesLoader;
 import com.qaprosoft.carina.core.foundation.webdriver.device.Device;
-import com.qaprosoft.carina.core.foundation.webdriver.device.DevicePool;
-import com.qaprosoft.hockeyapp.HockeyAppManager;
+import com.qaprosoft.carina.core.foundation.webdriver.screenshot.AutoScreenshotRule;
+import com.qaprosoft.carina.core.foundation.webdriver.screenshot.IScreenshotRule;
+import com.qaprosoft.zafira.client.ZafiraSingleton;
+import com.qaprosoft.zafira.listener.ZafiraEventRegistrar;
+import com.qaprosoft.zafira.models.dto.TestRunType;
 
 /*
- * AbstractTest - base test for UI and API tests.
+ * CarinaListener - base carin-core TestNG Listener.
  * 
- * @author Alex Khursevich
+ * @author Vadim Delendik
  */
 public class CarinaListener extends AbstractTestListener implements ISuiteListener {
-    protected static final Logger LOGGER = Logger.getLogger(CarinaListener.class);
+    private static final Logger LOGGER = Logger.getLogger(CarinaListener.class);
 
     protected static final long EXPLICIT_TIMEOUT = Configuration.getLong(Parameter.EXPLICIT_TIMEOUT);
 
     protected static final String SUITE_TITLE = "%s%s%s - %s (%s%s)";
     protected static final String XML_SUITE_NAME = " (%s)";
     
+    protected static boolean automaticDriversCleanup = true;
+
     static {
         try {
             // Add shutdown hook
             Runtime.getRuntime().addShutdownHook(new ShutdownHook());
             // Set log4j properties
-            PropertyConfigurator.configure(ClassLoader.getSystemResource("log4j.properties"));
-    
+            URL log4jUrl = ClassLoader.getSystemResource("carina-log4j.properties");
+            LOGGER.debug("carina-log4j.properties: " + log4jUrl);
+            PropertyConfigurator.configure(log4jUrl);
+
             LOGGER.info(Configuration.asString());
             // Configuration.validateConfiguration();
-    
+
             try {
                 L10N.init();
             } catch (Exception e) {
                 LOGGER.error("L10N bundle is not initialized successfully!", e);
             }
-    
-            try {
-                I18N.init();
-            } catch (Exception e) {
-                LOGGER.error("I18N bundle is not initialized successfully!", e);
-            }
-    
+
             try {
                 L10Nparser.init();
             } catch (Exception e) {
                 LOGGER.error("L10Nparser bundle is not initialized successfully!", e);
             }
-    
-            // TODO: move out from AbstractTest->executeBeforeTestSuite
+
+            // declare global capabilities in configuration if custom_capabilities is declared 
             String customCapabilities = Configuration.get(Parameter.CUSTOM_CAPABILITIES);
             if (!customCapabilities.isEmpty()) {
-                // redefine core CONFIG properties using custom capabilities file
+                // redefine core CONFIG properties using global custom capabilities file
                 new CapabilitiesLoader().loadCapabilities(customCapabilities);
             }
-    
-            String extraCapabilities = Configuration.get(Parameter.EXTRA_CAPABILITIES);
-            if (!extraCapabilities.isEmpty()) {
-                // redefine core CONFIG properties using extra capabilities file
-                new CapabilitiesLoader().loadCapabilities(extraCapabilities);
-            }
-    
-            updateAppPath();
+
+            IScreenshotRule autoScreenshotsRule = (IScreenshotRule) new AutoScreenshotRule();
+            Screenshot.addScreenshotRule(autoScreenshotsRule);
             
+            updateAppPath();
+
         } catch (Exception e) {
             LOGGER.error("Undefined failure during static carina listener init!", e);
         }
     }
-    
 
     @Override
     public void onStart(ISuite suite) {
-        //register programmatically carina based BeforeSuite/BeforeClass and BeforeMethod to execute those configuration part obligatory
-/*        XmlTest xmlTest = new XmlTest(suite.getXmlSuite());
-        xmlTest.setName("Sample Test");
+        LOGGER.debug("CarinaListener->onStart(ISuite suite)");
+        // register programmatically carina based BeforeSuite/BeforeClass and
+        // BeforeMethod to execute those configuration part obligatory
+        /*
+         * XmlTest xmlTest = new XmlTest(suite.getXmlSuite());
+         * xmlTest.setName("Sample Test");
+         * 
+         * // Create a list which can contain the classes that you want to run.
+         * List<XmlClass> myClasses = new ArrayList<XmlClass>();
+         * myClasses.add(new
+         * XmlClass("com.qaprosoft.carina.core.foundation.AbstractTest"));
+         * 
+         * // Assign that to the XmlTest Object created earlier.
+         * xmlTest.setXmlClasses(myClasses);
+         * 
+         * suite.getXmlSuite().addTest(xmlTest);
+         */
 
-        // Create a list which can contain the classes that you want to run.
-        List<XmlClass> myClasses = new ArrayList<XmlClass>();
-        myClasses.add(new XmlClass("com.qaprosoft.carina.core.foundation.AbstractTest"));
-
-        // Assign that to the XmlTest Object created earlier.
-        xmlTest.setXmlClasses(myClasses);
-            
-        suite.getXmlSuite().addTest(xmlTest);*/
-
-        List<String> coreLogPackages = new ArrayList<String>(Arrays.asList(Configuration.get(Parameter.CORE_LOG_PACKAGES).split(",")));
+        List<String> coreLogPackages = new ArrayList<String>(
+                Arrays.asList(Configuration.get(Parameter.CORE_LOG_PACKAGES).split(",")));
         if (coreLogPackages.size() > 0 && !"INFO".equalsIgnoreCase(Configuration.get(Parameter.CORE_LOG_LEVEL))) {
             // do core log level change only if custom properties are declared
             try {
@@ -166,9 +182,16 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
                 while (allLoggers.hasMoreElements()) {
                     Category tmpLogger = (Category) allLoggers.nextElement();
                     LOGGER.debug("loggerName: " + tmpLogger.getName());
+                    if ("log4j.logger.org.apache.http.wire".equals(tmpLogger.getName())) {
+                        // update this logger to be able to analyse ZafiraClient calls 
+                        LOGGER.info("Updaged logger level for '" + tmpLogger.getName() + "' to "
+                                + Configuration.get(Parameter.CORE_LOG_LEVEL));
+                        tmpLogger.setLevel(Level.toLevel(Configuration.get(Parameter.CORE_LOG_LEVEL)));
+                    }
                     for (String coreLogPackage : coreLogPackages) {
                         if (tmpLogger.getName().contains(coreLogPackage.trim())) {
-                            LOGGER.info("Updaged logger level for '" + tmpLogger.getName() + "' to " + Configuration.get(Parameter.CORE_LOG_LEVEL));
+                            LOGGER.info("Updaged logger level for '" + tmpLogger.getName() + "' to "
+                                    + Configuration.get(Parameter.CORE_LOG_LEVEL));
                             tmpLogger.setLevel(Level.toLevel(Configuration.get(Parameter.CORE_LOG_LEVEL)));
                         }
                     }
@@ -177,168 +200,151 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
                 LOGGER.error("Unable to redefine logger level due to the conflicts between log4j and slf4j!");
             }
         }
-        
-        //TODO: moved into separate class/method
-        LOGGER.debug("Default thread_count=" + suite.getXmlSuite().getThreadCount());
-        suite.getXmlSuite().setThreadCount(Configuration.getInt(Parameter.THREAD_COUNT));
-        LOGGER.debug("Updated thread_count=" + suite.getXmlSuite().getThreadCount());
 
-        // update DataProviderThreadCount if any property is provided otherwise sync with value from suite xml file
-        int count = Configuration.getInt(Parameter.DATA_PROVIDER_THREAD_COUNT);
-        if (count > 0) {
-            LOGGER.debug("Updated 'data_provider_thread_count' from "
-                    + suite.getXmlSuite().getDataProviderThreadCount() + " to " + count);
-            suite.getXmlSuite().setDataProviderThreadCount(count);
-        } else {
-            LOGGER.debug("Synching data_provider_thread_count with values from suite xml file...");
-            R.CONFIG.put(Parameter.DATA_PROVIDER_THREAD_COUNT.getKey(),
-                    String.valueOf(suite.getXmlSuite().getDataProviderThreadCount()));
-            LOGGER.debug("Updated 'data_provider_thread_count': " + Configuration.getInt(Parameter.DATA_PROVIDER_THREAD_COUNT));
-        }
-
-        LOGGER.debug("Default data_provider_thread_count="
-                + suite.getXmlSuite().getDataProviderThreadCount());
-        LOGGER.debug("Updated data_provider_thread_count="
-                + suite.getXmlSuite().getDataProviderThreadCount());
-
+        setThreadCount(suite);
         onHealthCheck(suite);
+        
+        LOGGER.info("CARINA_CORE_VERSION: " + getCarinaVersion());
     }
 
-    @Override
+	@Override
     public void onStart(ITestContext context) {
-        LOGGER.info("CarinaListener->OnTestStart(context): " + context.getName());
+        LOGGER.debug("CarinaListener->OnTestStart(ITestContext context): " + context.getName());
+        ReportContext.getBaseDir(); // create directory for logging as soon as possible
         super.onStart(context);
     }
-    
+
     @Override
     public void beforeConfiguration(ITestResult result) {
+        LOGGER.debug("CarinaListener->beforeConfiguration");
         super.beforeConfiguration(result);
-        // remember active test phase to organize valid driver pool manipulation process 
+        // remember active test phase to organize valid driver pool manipulation
+        // process
         if (result.getMethod().isBeforeSuiteConfiguration()) {
             TestPhase.setActivePhase(Phase.BEFORE_SUITE);
         }
-        
+
         if (result.getMethod().isBeforeClassConfiguration()) {
             TestPhase.setActivePhase(Phase.BEFORE_CLASS);
-            //TODO: analyze cases when AfterClass is not declared inside test java class
-            // maybe move into the BEFORE_CLASS
-            ConcurrentHashMap<String, CarinaDriver> currentDrivers = getDrivers();
-            // 1. quit all Phase.BEFORE_CLASS drivers for current thread as it is new configuration call/class 
-            for (Map.Entry<String, CarinaDriver> entry : currentDrivers.entrySet()) {
-                CarinaDriver drv = entry.getValue();
-                if (Phase.BEFORE_CLASS.equals(drv.getPhase())) {
-                    quitDriver(entry.getKey());
-                }
-            }
         }
-        
+
         if (result.getMethod().isBeforeMethodConfiguration()) {
             TestPhase.setActivePhase(Phase.BEFORE_METHOD);
-            
-            //TODO: test use-case with dependency
-            LOGGER.debug("Deinitialize unused driver(s) on before test method start.");
-            ConcurrentHashMap<String, CarinaDriver> currentDrivers = getDrivers();
-            // 1. quit all Phase.METHOD drivers for current thread
-            for (Map.Entry<String, CarinaDriver> entry : currentDrivers.entrySet()) {
-                CarinaDriver drv = entry.getValue();
-                if (Phase.METHOD.equals(drv.getPhase())) {
-                    quitDriver(entry.getKey());
-                }
-            }
         }
-        
+
         if (result.getMethod().isAfterMethodConfiguration()) {
             TestPhase.setActivePhase(Phase.AFTER_METHOD);
         }
-        
+
         if (result.getMethod().isAfterClassConfiguration()) {
             TestPhase.setActivePhase(Phase.AFTER_CLASS);
-            //TODO: analyze cases when AfterClass is not declared inside test java class
-            // maybe move into the BEFORE_CLASS
-            ConcurrentHashMap<String, CarinaDriver> currentDrivers = getDrivers();
-            // 1. quit all Phase.BEFORE_CLASS drivers for current thread as it is new configuration call/class 
-            for (Map.Entry<String, CarinaDriver> entry : currentDrivers.entrySet()) {
-                CarinaDriver drv = entry.getValue();
-                if (Phase.BEFORE_CLASS.equals(drv.getPhase())) {
-                    quitDriver(entry.getKey());
-                }
-            }
         }
-        
+
         if (result.getMethod().isAfterSuiteConfiguration()) {
             TestPhase.setActivePhase(Phase.AFTER_SUITE);
-            
-            //forcibly quit all drivers
-            quitDrivers();
         }
-        
+    }
+    
+    @Override
+    public void onConfigurationFailure(ITestResult result) {
+        LOGGER.debug("CarinaListener->onConfigurationFailure");
+        String errorMessage = getFailureReason(result);
+        takeScreenshot(result, "CONFIGURATION FAILED - " + errorMessage);
+
+        super.onConfigurationFailure(result);
     }
 
     @Override
     public void onTestStart(ITestResult result) {
-        
+        LOGGER.debug("CarinaListener->onTestStart");
         TestPhase.setActivePhase(Phase.METHOD);
-        String[] dependedUponMethods = result.getMethod().getMethodsDependedUpon();
-        
-        if (dependedUponMethods.length == 0) {
-            ConcurrentHashMap<String, CarinaDriver> currentDrivers = getDrivers();
-            // 1. quit all Phase.METHOD drivers for current thread
-            for (Map.Entry<String, CarinaDriver> entry : currentDrivers.entrySet()) {
-                CarinaDriver drv = entry.getValue();
-                if (Phase.METHOD.equals(drv.getPhase())) {
-                    quitDriver(entry.getKey());
-                }
-                
-                // all before_method drivers move into METHOD to be able to quit them on next onTestStart!
-                if (Phase.BEFORE_METHOD.equals(drv.getPhase())) {
-                    drv.setPhase(Phase.METHOD);
-                }
-            }
-        }
-        
+
         // handle expected skip
         Method testMethod = result.getMethod().getConstructorOrMethod().getMethod();
         if (ExpectedSkipManager.getInstance().isSkip(testMethod, result.getTestContext())) {
             skipExecution("Based on rule listed above");
         }
 
-        
         super.onTestStart(result);
-        
     }
 
     @Override
     public void onTestSuccess(ITestResult result) {
-        onTestFinish(result);
+        LOGGER.debug("CarinaListener->onTestSuccess");
         super.onTestSuccess(result);
+        onTestFinish(result);
     }
-    
+
     @Override
     public void onTestFailure(ITestResult result) {
-        onTestFinish(result);
+        LOGGER.debug("CarinaListener->onTestFailure");
+        String errorMessage = getFailureReason(result);
+        takeScreenshot(result, "TEST FAILED - " + errorMessage);
         super.onTestFailure(result);
+        onTestFinish(result);    
     }
-    
+
     @Override
     public void onTestSkipped(ITestResult result) {
-        onTestFinish(result);
-        super.onTestSkipped(result);        
+        LOGGER.debug("CarinaListener->onTestSkipped");
+        String errorMessage = getFailureReason(result);
+        takeScreenshot(result, "TEST FAILED - " + errorMessage);
+        super.onTestSkipped(result);
+        onTestFinish(result);  
     }
-        
+
+    private boolean hasDependencies(ITestResult result) {
+        String methodName = result.getMethod().getMethodName();
+        String className = result.getMethod().getTestClass().getName();
+        LOGGER.debug("current method: " + className + "." + methodName);
+
+        // analyze all suite methods and return true if any of them depends on
+        // existing method
+        List<ITestNGMethod> methods = result.getTestContext().getSuite().getAllMethods();
+        for (ITestNGMethod method : methods) {
+            LOGGER.debug("analyze method for dependency: " + method.getMethodName());
+            
+            List<String> dependencies = Arrays.asList(method.getMethodsDependedUpon());
+
+            if (dependencies.contains(methodName) ||
+                    dependencies.contains(className + "." + methodName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void onTestFinish(ITestResult result) {
         try {
+            // clear all kind of temporary properties
+            R.CONFIG.clearTestProperties();
+            R.TESTDATA.clearTestProperties();
+            R.DATABASE.clearTestProperties();
+            R.EMAIL.clearTestProperties();
+            R.REPORT.clearTestProperties();
+            R.ZAFIRA.clearTestProperties();
+            
+            LOGGER.debug("Test result is : " + result.getStatus());
+            // result status == 2 means failure, status == 3 means skip. We need to quit driver anyway for failure and skip
+            if ((automaticDriversCleanup && !hasDependencies(result)) || result.getStatus() == 2 || result.getStatus() == 3) {
+                quitDrivers(Phase.BEFORE_METHOD, Phase.METHOD);
+            }
+
             // TODO: improve later removing duplicates with AbstractTestListener
-            // handle Zafira already passed exception for re-run and do nothing. maybe return should be enough
+            // handle Zafira already passed exception for re-run and do nothing.
+            // maybe return should be enough
             if (result.getThrowable() != null && result.getThrowable().getMessage() != null
                     && result.getThrowable().getMessage().startsWith(SpecialKeywords.ALREADY_PASSED)) {
-                // [VD] it is prohibited to release TestInfoByThread in this place.!
+                // [VD] it is prohibited to release TestInfoByThread in this
+                // place.!
                 return;
             }
 
-            // handle AbstractTest->SkipExecution
+            // handle CarinaListener->SkipExecution
             if (result.getThrowable() != null && result.getThrowable().getMessage() != null
                     && result.getThrowable().getMessage().startsWith(SpecialKeywords.SKIP_EXECUTION)) {
-                // [VD] it is prohibited to release TestInfoByThread in this place.!
+                // [VD] it is prohibited to release TestInfoByThread in this
+                // place.!
                 return;
             }
 
@@ -349,32 +355,34 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
             // we shouldn't deregister info here as all retries will not work
             // TestNamingUtil.releaseZafiraTest();
 
-            // clear jira tickets to be sure that next test is not affected.
-            Jira.clearTickets();
-
-            Artifacts.clearArtifacts();
-
         } catch (Exception e) {
-            LOGGER.error("Exception in AbstractTest->executeAfterTestMethod!", e);
+            LOGGER.error("Exception in CarinaListener->onTestFinish!", e);
         }
     }
-    
+
     @Override
     public void onFinish(ITestContext context) {
+        LOGGER.debug("CarinaListener->onFinish(ITestContext context)");
         super.onFinish(context);
-        
-        LOGGER.info("CarinaListener->onFinish(context): " + context.getName());
-        
-        //TODO: refactor jira updater to make it s functional interface
+
+        // [SZ] it's still needed to close driver from BeforeClass stage.
+        // Otherwise it could be potentially used in other test classes 
+        quitDrivers(Phase.BEFORE_CLASS);
+
+        LOGGER.debug("CarinaListener->onFinish(context): " + context.getName());
+
+        // TODO: refactor jira updater to make it as functional interface
         // Update JIRA
         Jira.updateAfterSuite(context, EmailReportItemCollector.getTestResults());
     }
-    
+
     @Override
     public void onFinish(ISuite suite) {
+        LOGGER.debug("CarinaListener->onFinish(ISuite suite)");
         try {
+            // TODO: quitAllDivers forcibly
             ReportContext.removeTempDir(); // clean temp artifacts directory
-            //HtmlReportGenerator.generate(ReportContext.getBaseDir().getAbsolutePath());
+            // HtmlReportGenerator.generate(ReportContext.getBaseDir().getAbsolutePath());
 
             String browser = getBrowser();
             String deviceName = getDeviceName();
@@ -392,21 +400,21 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
             }
 
             if (!Configuration.get(Parameter.URL).isEmpty()) {
-                env += " - <a href='" + Configuration.get(Parameter.URL) + "'>" + Configuration.get(Parameter.URL) + "</a>";
+                env += " - <a href='" + Configuration.get(Parameter.URL) + "'>" + Configuration.get(Parameter.URL)
+                        + "</a>";
             }
 
             ReportContext.getTempDir().delete();
 
-//            // Update JIRA
-//            Jira.updateAfterSuite(context, EmailReportItemCollector.getTestResults());
+            // // Update JIRA
+            // Jira.updateAfterSuite(context,
+            // EmailReportItemCollector.getTestResults());
 
             LOGGER.debug("Generating email report...");
-            
+
             // Generate emailable html report using regular method
-            EmailReportGenerator report = new EmailReportGenerator(title, env,
-                    Configuration.get(Parameter.APP_VERSION), deviceName,
-                    browser, DateUtils.now(),
-                    EmailReportItemCollector.getTestResults(),
+            EmailReportGenerator report = new EmailReportGenerator(title, env, Configuration.get(Parameter.APP_VERSION),
+                    deviceName, browser, DateUtils.now(), EmailReportItemCollector.getTestResults(),
                     EmailReportItemCollector.getCreatedItems());
 
             String emailContent = report.getEmailBody();
@@ -421,7 +429,8 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
                 Assert.fail("All tests were skipped! Analyze logs to determine possible configuration issues.");
                 break;
             case SKIP_ALL_ALREADY_PASSED:
-                LOGGER.info("Nothing was executed in rerun mode because all tests already passed and registered in Zafira Repoting Service!");
+                LOGGER.info(
+                        "Nothing was executed in rerun mode because all tests already passed and registered in Zafira Repoting Service!");
                 break;
             default:
                 // do nothing
@@ -429,19 +438,31 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
             LOGGER.debug("Finish email report generation.");
 
         } catch (Exception e) {
-            LOGGER.error("Exception in AbstractTest->executeAfterSuite.", e);
+            LOGGER.error("Exception in CarinaListener->onFinish(ISuite suite)", e);
         } finally {
-            //do nothing
+            int counter = 0;
+            while (FtpUtils.isUploading() && ++counter < 30) {
+                LOGGER.info("waiting to finish FTP uploading... " + counter + " sec.");
+                CommonUtils.pause(1);
+            }
         }
+    }
+    
+    /**
+     * Disable automatic drivers cleanup after each TestMethod and switch to controlled by tests itself.
+     * But anyway all drivers will be closed forcibly as only suite is finished or aborted 
+     */
+    public static void disableDriversCleanup() {
+        automaticDriversCleanup = false;
     }
 
     // TODO: remove this private method
     private String getDeviceName() {
         String deviceName = "Desktop";
 
-        if (!DevicePool.getDevice().isNull()) {
+        if (!IDriverPool.getDefaultDevice().isNull()) {
             // Samsung - Android 4.4.2; iPhone - iOS 7
-            Device device = DevicePool.getDevice();
+            Device device = IDriverPool.getDefaultDevice();
             String deviceTemplate = "%s - %s %s";
             deviceName = String.format(deviceTemplate, device.getName(), device.getOs(), device.getOsVersion());
         }
@@ -450,12 +471,7 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
     }
 
     protected String getBrowser() {
-        String browser = "";
-        if (!Configuration.get(Parameter.BROWSER).isEmpty()) {
-            browser = Configuration.get(Parameter.BROWSER);
-        }
-
-        return browser;
+        return Configuration.getBrowser();
     }
 
     protected String getTitle(XmlSuite suite) {
@@ -465,7 +481,8 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
         }
         String device = getDeviceName();
 
-        String env = !Configuration.isNull(Parameter.ENV) ? Configuration.get(Parameter.ENV) : Configuration.get(Parameter.URL);
+        String env = !Configuration.isNull(Parameter.ENV) ? Configuration.get(Parameter.ENV)
+                : Configuration.get(Parameter.URL);
 
         String title = "";
         String app_version = "";
@@ -478,7 +495,8 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
         String suiteName = getSuiteName(suite);
         String xmlFile = getSuiteFileName(suite);
 
-        title = String.format(SUITE_TITLE, app_version, suiteName, String.format(XML_SUITE_NAME, xmlFile), env, device, browser);
+        title = String.format(SUITE_TITLE, app_version, suiteName, String.format(XML_SUITE_NAME, xmlFile), env, device,
+                browser);
 
         return title;
     }
@@ -506,15 +524,15 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
             suiteName = Configuration.get(Parameter.SUITE_NAME).isEmpty() ? suite.getName()
                     : Configuration.get(Parameter.SUITE_NAME);
         } else {
-            suiteName = Configuration.get(Parameter.SUITE_NAME).isEmpty() ? R.EMAIL.get("title") : Configuration.get(Parameter.SUITE_NAME);
+            suiteName = Configuration.get(Parameter.SUITE_NAME).isEmpty() ? R.EMAIL.get("title")
+                    : Configuration.get(Parameter.SUITE_NAME);
         }
 
         return suiteName;
     }
 
     private void printExecutionSummary(List<TestResultItem> tris) {
-        Messager.INROMATION
-                .info("**************** Test execution summary ****************");
+        Messager.INROMATION.info("**************** Test execution summary ****************");
         int num = 1;
         for (TestResultItem tri : tris) {
             String failReason = tri.getFailReason();
@@ -525,8 +543,7 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
             if (!tri.isConfig() && !failReason.contains(SpecialKeywords.ALREADY_PASSED)
                     && !failReason.contains(SpecialKeywords.SKIP_EXECUTION)) {
                 String reportLinks = !StringUtils.isEmpty(tri.getLinkToScreenshots())
-                        ? "screenshots=" + tri.getLinkToScreenshots() + " | "
-                        : "";
+                        ? "screenshots=" + tri.getLinkToScreenshots() + " | " : "";
                 reportLinks += !StringUtils.isEmpty(tri.getLinkToLog()) ? "log=" + tri.getLinkToLog() : "";
                 Messager.TEST_RESULT.info(String.valueOf(num++), tri.getTest(), tri.getResult().toString(),
                         reportLinks);
@@ -537,7 +554,8 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
     /**
      * Redefine Jira tickets from test.
      *
-     * @param tickets to set
+     * @param tickets
+     *            to set
      */
     @Deprecated
     protected void setJiraTicket(String... tickets) {
@@ -571,11 +589,11 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
         }
 
         try {
-            if (!Configuration.get(Parameter.HOCKEYAPP_TOKEN).isEmpty()) {
-                updateHockeyAppPath();
+            if (!Configuration.get(Parameter.APPCENTER_TOKEN).isEmpty()) {
+                updateAppCenterAppPath();
             }
         } catch (Exception e) {
-            LOGGER.error("HockeyApp manager exception detected!", e);
+            LOGGER.error("AppCenter manager exception detected!", e);
         }
 
     }
@@ -583,25 +601,26 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
     /**
      * Method to update MOBILE_APP path in case if apk is located in Hockey App.
      */
-    private static void updateHockeyAppPath() {
-        // hockeyapp://appName/platformName/buildType/version
-        Pattern HOCKEYAPP_PATTERN = Pattern
-                .compile("hockeyapp:\\/\\/([a-zA-Z-0-9][^\\/]*)\\/([a-zA-Z-0-9][^\\/]*)\\/([a-zA-Z-0-9][^\\/]*)\\/([a-zA-Z-0-9][^\\/]*)");
+    private static void updateAppCenterAppPath() {
+        // appcenter://appName/platformName/buildType/version
+        Pattern APPCENTER_PATTERN = Pattern.compile(
+                "appcenter:\\/\\/([a-zA-Z-0-9][^\\/]*)\\/([a-zA-Z-0-9][^\\/]*)\\/([a-zA-Z-0-9][^\\/]*)\\/([a-zA-Z-0-9][^\\/]*)");
         String mobileAppPath = Configuration.getMobileApp();
-        Matcher matcher = HOCKEYAPP_PATTERN.matcher(mobileAppPath);
+        Matcher matcher = APPCENTER_PATTERN.matcher(mobileAppPath);
 
-        LOGGER.info("Analyzing if mobile_app is located on HockeyApp...");
+        LOGGER.info("Analyzing if mobile_app is located on AppCenter...");
         if (matcher.find()) {
-            LOGGER.info("app artifact is located on HockeyApp...");
+            LOGGER.info("app artifact is located on AppCenter...");
             String appName = matcher.group(1);
             String platformName = matcher.group(2);
             String buildType = matcher.group(3);
             String version = matcher.group(4);
 
-            String hockeyAppLocalStorage = Configuration.get(Parameter.HOCKEYAPP_LOCAL_STORAGE);
-            // download file from HockeyApp to local storage
+            String appCenterAppLocalStorage = Configuration.get(Parameter.APPCENTER_LOCAL_STORAGE);
+            // download file from AppCenter to local storage
 
-            File file = HockeyAppManager.getInstance().getBuild(hockeyAppLocalStorage, appName, platformName, buildType, version);
+            File file = AppCenterManager.getInstance().getBuild(appCenterAppLocalStorage, appName, platformName, buildType,
+                    version);
 
             Configuration.setMobileApp(file.getAbsolutePath());
 
@@ -621,7 +640,8 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
      */
     private static void updateS3AppPath() {
         Pattern S3_BUCKET_PATTERN = Pattern.compile("s3:\\/\\/([a-zA-Z-0-9][^\\/]*)\\/(.*)");
-        // get app path to be sure that we need(do not need) to download app from s3 bucket
+        // get app path to be sure that we need(do not need) to download app
+        // from s3 bucket
         String mobileAppPath = Configuration.getMobileApp();
         Matcher matcher = S3_BUCKET_PATTERN.matcher(mobileAppPath);
 
@@ -647,31 +667,40 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
 
             }
 
-            S3Object objBuild = AmazonS3Manager.getInstance().get(bucketName, key);
-
-            String s3LocalStorage = Configuration.get(Parameter.S3_LOCAL_STORAGE);
-
-            // download file from AWS to local storage
-
-            String fileName = s3LocalStorage + "/" + StringUtils.substringAfterLast(objBuild.getKey(), "/");
-            File file = new File(fileName);
-
-            // verify maybe requested artifact with the same size was already
-            // download
-            if (file.exists() && file.length() == objBuild.getObjectMetadata().getContentLength()) {
-                LOGGER.info("build artifact with the same size already downloaded: " + file.getAbsolutePath());
+            if (Configuration.getBoolean(Parameter.S3_USE_PRESIGN_URL)) {
+                // generate presigned url for nearest 8 hours
+                long hours = 8*1000*60*60;
+                String presignedAppUrl = AmazonS3Manager.getInstance().generatePreSignUrl(bucketName, key, hours).toString();
+                LOGGER.debug("preSigned URL: " + presignedAppUrl);
+                Configuration.setMobileApp(presignedAppUrl);
             } else {
-                LOGGER.info(String.format("Following data was extracted: bucket: %s, key: %s, local file: %s",
-                        bucketName, key, file.getAbsolutePath()));
-                AmazonS3Manager.getInstance().download(bucketName, key, new File(fileName));
-            }
+                // download artifact into the local storage
+                S3Object objBuild = AmazonS3Manager.getInstance().get(bucketName, key);
+    
+                String s3LocalStorage = Configuration.get(Parameter.S3_LOCAL_STORAGE);
+    
+                // download file from AWS to local storage
+    
+                String fileName = s3LocalStorage + "/" + StringUtils.substringAfterLast(objBuild.getKey(), "/");
+                File file = new File(fileName);
+    
+                // verify maybe requested artifact with the same size was already
+                // download
+                if (file.exists() && file.length() == objBuild.getObjectMetadata().getContentLength()) {
+                    LOGGER.info("build artifact with the same size already downloaded: " + file.getAbsolutePath());
+                } else {
+                    LOGGER.info(String.format("Following data was extracted: bucket: %s, key: %s, local file: %s",
+                            bucketName, key, file.getAbsolutePath()));
+                    AmazonS3Manager.getInstance().download(bucketName, key, new File(fileName));
+                }
+    
+                Configuration.setMobileApp(file.getAbsolutePath());
 
-            Configuration.setMobileApp(file.getAbsolutePath());
-
-            // try to redefine app_version if it's value is latest or empty
-            String appVersion = Configuration.get(Parameter.APP_VERSION);
-            if (appVersion.equals("latest") || appVersion.isEmpty()) {
-                R.CONFIG.put(Parameter.APP_VERSION.getKey(), file.getName());
+                // try to redefine app_version if it's value is latest or empty
+                String appVersion = Configuration.get(Parameter.APP_VERSION);
+                if (appVersion.equals("latest") || appVersion.isEmpty()) {
+                    R.CONFIG.put(Parameter.APP_VERSION.getKey(), file.getName());
+                }
             }
 
         }
@@ -700,7 +729,6 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
         }
         checkHealth(suite, healthCheckClass, healthCheckMethodsArray);
     }
-    
 
     private void checkHealth(ISuite suite, String className, String[] methods) {
 
@@ -717,7 +745,8 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
         XmlClass xmlHealthCheckClass = new XmlClass();
         xmlHealthCheckClass.setName(className);
 
-        // TestNG do not execute missed methods so we have to calulate expected methods count to handle potential mistakes in methods naming
+        // TestNG do not execute missed methods so we have to calulate expected
+        // methods count to handle potential mistakes in methods naming
         int expectedMethodsCount = -1;
         if (methods != null) {
             // declare particular methods if they are provided
@@ -769,6 +798,153 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
         }
         return includes;
     }
+    
+    private String takeScreenshot(ITestResult result, String msg) {
+        String screenId = "";
+
+        ConcurrentHashMap<String, CarinaDriver> drivers = getDrivers();
+
+        try {
+            for (Map.Entry<String, CarinaDriver> entry : drivers.entrySet()) {
+                String driverName = entry.getKey();
+                WebDriver drv = entry.getValue().getDriver();
+    
+                if (drv instanceof EventFiringWebDriver) {
+                    drv = ((EventFiringWebDriver) drv).getWrappedDriver();
+                }
+                
+                if (Screenshot.isEnabled()) {
+                    screenId = Screenshot.capture(drv, driverName + ": " + msg, true); // in case of failure
+                }
+            }
+        } catch (Throwable thr) {
+            LOGGER.error("Failure detected on screenshot generation after failure: ", thr);
+        }
+        return screenId;
+    }
+    
+    /*
+     * Parse TestNG <suite ...> tag and return any attribute
+     * @param ISuite suite
+     * @param IString attribute
+     * @return String attribute value or empty string
+     * 
+    */    
+    private String getAttributeValue(ISuite suite, String attribute) {
+        String res = "";
+        File file = new File(suite.getXmlSuite().getFileName());
+        DocumentBuilderFactory documentBuilderFactory = DocumentBuilderFactory.newInstance();
+
+        documentBuilderFactory.setValidating(false);
+        documentBuilderFactory.setNamespaceAware(true);
+        try {
+            documentBuilderFactory.setFeature("http://xml.org/sax/features/namespaces", false);
+            documentBuilderFactory.setFeature("http://xml.org/sax/features/validation", false);
+            documentBuilderFactory.setFeature("http://apache.org/xml/features/nonvalidating/load-dtd-grammar", false);
+            documentBuilderFactory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+
+            DocumentBuilder documentBuilder = documentBuilderFactory.newDocumentBuilder();
+            Document document = documentBuilder.parse(file);
+
+            for (int i = 0; i < document.getChildNodes().getLength(); i++) {
+                NamedNodeMap nodeMapAttributes = document.getChildNodes().item(i).getAttributes();
+                if (nodeMapAttributes == null) {
+                    continue;
+                }
+
+                // get "name" from suite element
+                // <suite verbose="1" name="Carina Demo Tests - API Sample" thread-count="3" >
+                Node nodeName = nodeMapAttributes.getNamedItem("name");
+                if (nodeName == null) {
+                    continue;
+                }
+
+                if (suite.getName().equals(nodeName.getNodeValue())) {
+                    // valid suite node detected
+                    Node nodeAttribute = nodeMapAttributes.getNamedItem(attribute);
+                    if (nodeAttribute != null) {
+                        res = nodeAttribute.getNodeValue();
+                        break;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.warn("Unable to get attribute '" + attribute +"' from suite: " + suite.getXmlSuite().getFileName(), e);
+        }
+
+        return res;
+
+    }
+    private void setThreadCount(ISuite suite) {
+        //Reuse default thread-count value from suite TestNG file if it is not overridden in _config.properties
+        
+        /*
+         * WARNING! We coudn't override default thread-count="5" and data-provider-thread-count="10"!
+         * suite.getXmlSuite().toXml() add those default values anyway even if the absent in suite xml file declaraton.
+         * To make possible to parse correctly we had to reuse external parser and private getAttributeValue  
+        */
+        
+        if (Configuration.getInt(Parameter.THREAD_COUNT) >= 1) {
+            // use thread-count from config.properties
+            suite.getXmlSuite().setThreadCount(Configuration.getInt(Parameter.THREAD_COUNT));
+            LOGGER.debug("Updated thread_count=" + suite.getXmlSuite().getThreadCount());
+        } else {
+            String suiteThreadCount = getAttributeValue(suite, "thread-count");
+            LOGGER.debug("thread-count from suite: " + suiteThreadCount);
+            if (suiteThreadCount.isEmpty()) {
+                LOGGER.info("Set thread_count=1");
+                R.CONFIG.put(Parameter.THREAD_COUNT.getKey(), "1");
+                suite.getXmlSuite().setThreadCount(1);
+            } else {
+                // reuse value from suite xml file
+                LOGGER.debug("Synching thread_count with values from suite xml file...");
+                R.CONFIG.put(Parameter.THREAD_COUNT.getKey(), suiteThreadCount);
+                LOGGER.info("Use thread_count='" + suite.getXmlSuite().getThreadCount() + "' from suite file.");                
+            }
+        }
+        
+        if (Configuration.getInt(Parameter.DATA_PROVIDER_THREAD_COUNT) >= 1) {
+            // use thread-count from config.properties
+            suite.getXmlSuite().setDataProviderThreadCount(Configuration.getInt(Parameter.DATA_PROVIDER_THREAD_COUNT));
+            LOGGER.debug("Updated data_provider_thread_count=" + suite.getXmlSuite().getDataProviderThreadCount());            
+        } else {
+            String suiteDataProviderThreadCount = getAttributeValue(suite, "data-provider-thread-count");        
+            LOGGER.debug("data-provider-thread-count from suite: " + suiteDataProviderThreadCount);
+            
+            if (suiteDataProviderThreadCount.isEmpty()) {
+                LOGGER.info("Set data_provider_thread_count=1");
+                R.CONFIG.put(Parameter.DATA_PROVIDER_THREAD_COUNT.getKey(), "1");
+                suite.getXmlSuite().setDataProviderThreadCount(1);                
+            } else {
+                // reuse value from suite xml file
+                LOGGER.debug("Synching data_provider_thread_count with values from suite xml file...");
+                R.CONFIG.put(Parameter.DATA_PROVIDER_THREAD_COUNT.getKey(), suiteDataProviderThreadCount);
+                LOGGER.info("Use data_provider_thread_count='" + suite.getXmlSuite().getDataProviderThreadCount() + "' from suite file.");                
+            }
+        }
+    }
+
+    private String getCarinaVersion() {
+
+        String carinaVersion = "";
+        try {
+            Class<CarinaListener> theClass = CarinaListener.class;
+
+            String classPath = theClass.getResource(theClass.getSimpleName() + ".class").toString();
+            LOGGER.debug("Class: " + classPath);
+
+            Pattern pattern = Pattern.compile(".*\\/(.*)\\/.*!");
+            Matcher matcher = pattern.matcher(classPath);
+
+            if (matcher.find()) {
+                carinaVersion = matcher.group(1);
+            }
+        } catch (Exception e) {
+            LOGGER.debug(e);
+        }
+
+        return carinaVersion;
+    }
 
     public static class ShutdownHook extends Thread {
 
@@ -781,7 +957,8 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
             }
             for (String key : allData.keySet()) {
                 LOGGER.debug("Creating... medata for '" + key + "' object...");
-                File file = new File(ReportContext.getArtifactsFolder().getAbsolutePath() + "/metadata/" + key.hashCode() + ".json");
+                File file = new File(
+                        ReportContext.getArtifactsFolder().getAbsolutePath() + "/metadata/" + key.hashCode() + ".json");
                 PrintWriter out = null;
                 try {
                     out = new PrintWriter(file);
@@ -801,40 +978,44 @@ public class CarinaListener extends AbstractTestListener implements ISuiteListen
                 LOGGER.debug("Generating collected metadada finish...");
             }
         }
-        
-        private void quitAllDrivers() {
-            // as it is shutdown hook just try to quit all registered drivers on by one
-            for (CarinaDriver carinaDriver : IDriverPool.driversPool) {
-                //it is expected that all drivers are killed in appropriate aftermethod/class/suite blocks
-                String name = carinaDriver.getName();
-                LOGGER.warn("Trying to quite driver '" + name + "' on shutdown hook action!");
-                ProxyPool.stopProxy();
-                
-                try {
-                    logger.debug("Driver exiting..." + name);
-                    carinaDriver.getDriver().quit();
-                    logger.debug("Driver exited..." + name);
-                } catch (WebDriverException e) {
-                    logger.debug("Error message detected during driver verification: " + e.getMessage(), e);
-                    // do nothing
-                } catch (Exception e) {
-                    logger.debug("Error discovered during driver quit: " + e.getMessage(), e);
 
-                    // TODO: it seems like BROWSER_TIMEOUT or NODE_FORWARDING should be handled here as well
-                    if (!e.getMessage().contains("Session ID is null.")) {
-                        throw e;
+        private void quitAllDriversOnHook() {
+            // #810 add zafira testrun abort as part of shutdown hook
+            if (ZafiraSingleton.INSTANCE.isRunning()) {
+                LOGGER.debug("Zafira test run is still in progress. trying to abort...");
+                try {
+                    Optional<TestRunType> testRun = ZafiraEventRegistrar.getTestRun();
+                    if (testRun != null) {
+                        LOGGER.debug("detected testrun id to abort: " + testRun.get().getId());
+                        ZafiraSingleton.INSTANCE.getClient().abortTestRun(testRun.get().getId());
+                        LOGGER.debug("aborted testrun");
                     }
-                } finally {
-                    //do nothing
+                } catch (NoSuchElementException e) {
+                    LOGGER.debug("No Zafira testrun detected.");
+                }
+            }
+
+            // as it is shutdown hook just try to quit all existing drivers one by one
+            for (CarinaDriver carinaDriver : driversPool) {
+                // it is expected that all drivers are killed in appropriate AfterMethod/Class/Suite blocks
+                String name = carinaDriver.getName();
+                LOGGER.warn("Trying to quit driver '" + name + "' on shutdown hook action!");
+                carinaDriver.getDevice().disconnectRemote();
+                ProxyPool.stopProxy();
+                try {
+                    LOGGER.debug("Driver exiting..." + name);
+                    carinaDriver.getDriver().quit();
+                    LOGGER.debug("Driver exited..." + name);
+                } catch (Exception e) {
+                    // do nothing
                 }
             }
         }
 
-
         @Override
         public void run() {
             LOGGER.debug("Running shutdown hook");
-            quitAllDrivers();
+            quitAllDriversOnHook();
             generateMetadata();
         }
 

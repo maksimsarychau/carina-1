@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,8 +32,7 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.support.FindBy;
 import org.openqa.selenium.support.pagefactory.ElementLocator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.log4j.Logger;
 
 import com.qaprosoft.alice.models.dto.RecognitionMetaType;
 import com.qaprosoft.carina.core.foundation.webdriver.ai.FindByAI;
@@ -50,7 +49,7 @@ import com.qaprosoft.carina.core.foundation.webdriver.decorator.annotations.Disa
  * {@link org.openqa.selenium.support.CacheLookup}.
  */
 public class ExtendedElementLocator implements ElementLocator {
-    private static final Logger LOGGER = LoggerFactory.getLogger(ExtendedElementLocator.class);
+    private static final Logger LOGGER = Logger.getLogger(ExtendedElementLocator.class);
 
     private final SearchContext searchContext;
     private boolean shouldCache;
@@ -71,13 +70,13 @@ public class ExtendedElementLocator implements ElementLocator {
     public ExtendedElementLocator(SearchContext searchContext, Field field) {
         this.searchContext = searchContext;
 
-        if (field.isAnnotationPresent(FindBy.class)) {
+        if (field.isAnnotationPresent(FindBy.class) || field.isAnnotationPresent(ExtendedFindBy.class)) {
             LocalizedAnnotations annotations = new LocalizedAnnotations(field);
             this.shouldCache = true;
             this.caseInsensitive = false;
             this.by = annotations.buildBy();
             if (field.isAnnotationPresent(DisableCacheLookup.class)) {
-            	this.shouldCache = false;
+                this.shouldCache = false;
             }
             if (field.isAnnotationPresent(CaseInsensitiveXPath.class)) {
                 this.caseInsensitive = true;
@@ -96,7 +95,7 @@ public class ExtendedElementLocator implements ElementLocator {
      */
     public WebElement findElement() {
         if (cachedElement != null && shouldCache) {
-        	LOGGER.debug("returning element from cache: " + by);
+            LOGGER.debug("returning element from cache: " + by);
             return cachedElement;
         }
 
@@ -109,16 +108,16 @@ public class ExtendedElementLocator implements ElementLocator {
                 by = toCaseInsensitive(by.toString());
             }
             try {
-            	element = searchContext.findElement(by);
+                element = searchContext.findElement(by);
             } catch (NoSuchElementException e) {
                 exception = e;
-            	//TODO: on iOS findElement return nothing but findElements return valid single item
-            	// maybe migrate to the latest appium java driver
-            	elements = searchContext.findElements(by);
-            	if (!elements.isEmpty()) {
-            		exception = null;
-            		element = searchContext.findElements(by).get(0);
-            	}
+                //TODO: on iOS findElement return nothing but findElements return valid single item
+                // maybe migrate to the latest appium java driver
+                elements = searchContext.findElements(by);
+                if (!elements.isEmpty()) {
+                    exception = null;
+                    element = searchContext.findElements(by).get(0);
+                }
                 LOGGER.debug("Unable to find element: " + e.getMessage());
             }
         }
@@ -132,7 +131,7 @@ public class ExtendedElementLocator implements ElementLocator {
             throw exception != null ? exception : new NoSuchElementException("Unable to find element by Selenium/AI");
         }
 
-		// 1. enable cache for successfully discovered element to minimize selenium calls
+        // 1. enable cache for successfully discovered element to minimize selenium calls
         if (shouldCache) {
             cachedElement = element;
         }
@@ -144,16 +143,16 @@ public class ExtendedElementLocator implements ElementLocator {
      */
     public List<WebElement> findElements() {
         List<WebElement> elements = null;
-    	NoSuchElementException exception = null;
+        NoSuchElementException exception = null;
 
-    	try {
-    		elements = searchContext.findElements(by);
+        try {
+            elements = searchContext.findElements(by);
         } catch (NoSuchElementException e) {
             LOGGER.debug("Unable to find elements: " + e.getMessage());
         }
 
-    	//TODO: incorporate find by AI???
-    	
+        //TODO: incorporate find by AI???
+        
         // If no luck throw general NoSuchElementException
         if (elements == null) {
             throw exception != null ? exception : new NoSuchElementException("Unable to find elements by Selenium");
@@ -187,20 +186,40 @@ public class ExtendedElementLocator implements ElementLocator {
      */
     public static By toCaseInsensitive(String locator) {
         String xpath = StringUtils.remove(locator, "By.xpath: ");
-        String attributePattern = "(\\[?(contains\\(|starts-with\\(|ends-with\\(|\\,|\\[|\\=|\\band\\b\\s?(\\bcontains\\b\\()?|\\bor\\b\\s?(\\bcontains\\b\\()?))(.+?(\\(\\))?)((?=\\,|\\)|\\=|\\]|\\band\\b|\\bor\\b)\\]?)";
+        String attributePattern = "((@text|text\\(\\)|@content-desc)\\s*(\\,|\\=)\\s*(\\'|\\\")(.+?)(\\'|\\\")(\\)(\\s*\\bor\\b\\s*)?|\\]|\\)\\]))";
+        //TODO: test when xpath globally are declared inside single quota
+        
+        // @text of text() - group(2)
+        // , or = - group(3)
+        // ' or " - group(4)
+        // value - group(5)
+        // ' or " - group(6)
+        // ] or ) - group(7)
+        
+        // double translate is needed to make xpath and value case insensitive.
+        // For example on UI we have "Inscription", so with a single translate we must convert in page object all those values to lowercase
+        // double translate allow to use as is and convert everywhere
+        
+        // Expected xpath for both side translate
+        // *[translate(@text, '$U', '$l')=translate("Inscription", "inscription".UPPER, "inscription".LOWER)]
+        
         Matcher matcher = Pattern.compile(attributePattern).matcher(xpath);
         StringBuffer sb = new StringBuffer();
         while (matcher.find()) {
-            String replacement = matcher.group(1) + "translate(" + matcher.group(5)
-                    + ", 'ABCDEFGHIJKLMNOPQRSTUVWXYZÀÁÂÄÃÇČÉÈÊËĔŒĞĢÎÏÍÌÔÖŌÒÓØŜŞßÙÛÜŪŸ', 'abcdefghijklmnopqrstuvwxyzàáâäåçčéèêëĕœğģîïíìôöōòóøŝşßùûüūÿ') " + matcher.group(7);
+            String value = matcher.group(5);
+            String replacement = "translate(" + matcher.group(2) + ", " + matcher.group(4) + value.toUpperCase() + matcher.group(4) + ", " + matcher.group(4) + value.toLowerCase() + matcher.group(4) + ")" + matcher.group(3)
+                    + "translate(" + matcher.group(4) + value + matcher.group(4)+ ", " + matcher.group(4) + value.toUpperCase() + matcher.group(4) + ", " + matcher.group(4) + value.toLowerCase() + matcher.group(6)
+                    + ")" + matcher.group(7);
+            LOGGER.debug("xpath translate:");
+            LOGGER.debug(replacement);
             matcher.appendReplacement(sb, replacement);
         }
         matcher.appendTail(sb);
         return By.xpath(sb.toString());
     }
 
-	public void setShouldCache(boolean shouldCache) {
-		this.shouldCache = shouldCache;
-	}
+    public void setShouldCache(boolean shouldCache) {
+        this.shouldCache = shouldCache;
+    }
 
 }

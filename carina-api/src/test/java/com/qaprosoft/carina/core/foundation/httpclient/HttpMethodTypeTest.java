@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -67,5 +67,12 @@ public class HttpMethodTypeTest {
         HttpMethodType type = HttpMethodType.PATCH;
         Assert.assertEquals(type.getCode(), 6);
         Assert.assertEquals(type.getName(), "PATCH");
+    }
+    
+    @Test
+    public void testOptionsMethod() {
+        HttpMethodType type = HttpMethodType.OPTIONS;
+        Assert.assertEquals(type.getCode(), 7);
+        Assert.assertEquals(type.getName(), "OPTIONS");
     }
 }

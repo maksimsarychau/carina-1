@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,10 +17,15 @@ package com.qaprosoft.carina.core.foundation.webdriver.core.factory.impl;
 
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Arrays;
+import java.util.Optional;
 import java.util.UUID;
 
 import org.apache.commons.lang3.StringUtils;
+import org.apache.log4j.Logger;
 import org.openqa.selenium.Capabilities;
+import org.openqa.selenium.Dimension;
+import org.openqa.selenium.Point;
 import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.remote.BrowserType;
 import org.openqa.selenium.remote.DesiredCapabilities;
@@ -38,15 +43,19 @@ import com.qaprosoft.carina.core.foundation.webdriver.core.capability.impl.deskt
 import com.qaprosoft.carina.core.foundation.webdriver.core.capability.impl.desktop.OperaCapabilities;
 import com.qaprosoft.carina.core.foundation.webdriver.core.capability.impl.desktop.SafariCapabilities;
 import com.qaprosoft.carina.core.foundation.webdriver.core.factory.AbstractFactory;
+import com.qaprosoft.carina.core.foundation.webdriver.core.factory.DriverFactory.HubType;
 import com.qaprosoft.carina.core.foundation.webdriver.listener.DesktopRecordingListener;
 import com.qaprosoft.carina.core.foundation.webdriver.listener.EventFiringSeleniumCommandExecutor;
+import com.qaprosoft.carina.core.foundation.webdriver.listener.ZebrunnerRecordingListener;
+import com.qaprosoft.carina.core.foundation.webdriver.listener.ZebrunnerSessionLogListener;
 
 import io.appium.java_client.ios.IOSStartScreenRecordingOptions.VideoQuality;
 
 public class DesktopFactory extends AbstractFactory {
+    private static final Logger LOGGER = Logger.getLogger(DesktopFactory.class);
 
     private static DesiredCapabilities staticCapabilities;
-    
+
     @Override
     public WebDriver create(String name, DesiredCapabilities capabilities, String seleniumHost) {
         RemoteWebDriver driver = null;
@@ -64,16 +73,37 @@ public class DesktopFactory extends AbstractFactory {
         }
 
         try {
-            
+
             EventFiringSeleniumCommandExecutor ce = new EventFiringSeleniumCommandExecutor(new URL(seleniumHost));
+
             if (isVideoEnabled()) {
-                final String videoName = UUID.randomUUID().toString();
-                capabilities.setCapability("videoName", videoName + ".mp4");
-                capabilities.setCapability("videoFrameRate", getBitrate(VideoQuality.valueOf(R.CONFIG.get("screen_record_quality"))));
-                ce.getListeners().add(new DesktopRecordingListener(initVideoArtifact(videoName)));
+                capabilities.setCapability("videoFrameRate", getBitrate(VideoQuality.valueOf(R.CONFIG.get("web_screen_record_quality"))));
+                // TODO: implement custom listeners later if needed. For example get video artifact from extrenal service...
+                switch (HubType.valueOf(Configuration.get(Parameter.HUB_MODE).toUpperCase())) {
+                case SELENIUM:
+                case MCLOUD:
+                case AEROKUBE:
+                case SAUCELABS:
+                case DEFAULT:
+                    String videoName = String.format(SpecialKeywords.DEFAULT_VIDEO_FILENAME, UUID.randomUUID().toString());
+                    capabilities.setCapability("videoName", videoName); //required capability for selenoid 
+                    ce.getListeners().add(new DesktopRecordingListener(initVideoArtifact(videoName)));   
+                    break;
+                case BROWSERSTACK:
+                    // TODO: https://github.com/qaprosoft/carina/issues/949  
+                    // https://www.browserstack.com/automate/capabilities (browserstack.video, browserstack.seleniumLogs etc)
+                    break;
+                case ZEBRUNNER:
+                    // Zebrunner will place video to separate unique folder, no need to generate new name
+                    ce.getListeners().add(new ZebrunnerRecordingListener(initVideoArtifact("%s/" + VIDEO_DEFAULT)));
+                    ce.getListeners().add(new ZebrunnerSessionLogListener(initSessionLogArtifact("%s/" + SESSION_LOG_DEFAULT)));
+                    break;
+                }
             }
-            
+
             driver = new RemoteWebDriver(ce, capabilities);
+
+            resizeBrowserWindow(driver, capabilities);
         } catch (MalformedURLException e) {
             throw new RuntimeException("Unable to create desktop driver", e);
         }
@@ -83,14 +113,13 @@ public class DesktopFactory extends AbstractFactory {
     }
 
     @SuppressWarnings("deprecation")
-	public DesiredCapabilities getCapabilities(String name) {
-        String browser = Configuration.get(Parameter.BROWSER);
+    public DesiredCapabilities getCapabilities(String name) {
+        String browser = Configuration.getBrowser();
 
         if (BrowserType.FIREFOX.equalsIgnoreCase(browser)) {
             return new FirefoxCapabilities().getCapability(name);
         } else if (BrowserType.IEXPLORE.equalsIgnoreCase(browser) || BrowserType.IE.equalsIgnoreCase(browser) || browser.equalsIgnoreCase("ie")) {
-            DesiredCapabilities caps = new IECapabilities().getCapability(name);
-            return caps;
+            return new IECapabilities().getCapability(name);
         } else if (BrowserType.SAFARI.equalsIgnoreCase(browser)) {
             return new SafariCapabilities().getCapability(name);
         } else if (BrowserType.CHROME.equalsIgnoreCase(browser)) {
@@ -98,10 +127,7 @@ public class DesktopFactory extends AbstractFactory {
         } else if (BrowserType.OPERA_BLINK.equalsIgnoreCase(browser) || BrowserType.OPERA.equalsIgnoreCase(browser)) {
             return new OperaCapabilities().getCapability(name);
         } else if (BrowserType.EDGE.toLowerCase().contains(browser.toLowerCase())) {
-            DesiredCapabilities caps = new EdgeCapabilities().getCapability(name);
-            // forcibly override browser name to edge for support 3rd party solutions like browserstack
-            caps.setBrowserName(browser);
-            return caps;
+            return new EdgeCapabilities().getCapability(name);
         } else {
             throw new RuntimeException("Unsupported browser: " + browser);
         }
@@ -114,26 +140,26 @@ public class DesktopFactory extends AbstractFactory {
         staticCapabilities.setCapability(name, value);
     }
 
-	@Override
-	public String getVncURL(WebDriver driver) {
-		String vncURL = null;
-		if (driver instanceof RemoteWebDriver && "true".equals(Configuration.getCapability("enableVNC"))) {
-			// TODO: resolve negative case when VNC is not supported
-			final RemoteWebDriver rwd = (RemoteWebDriver) driver;
-		    String protocol = R.CONFIG.get(vnc_protocol);
-			String host = R.CONFIG.get(vnc_host);
-			String port = R.CONFIG.get(vnc_port); 
-			// If VNC host/port not set user them from Selenim
-			if(StringUtils.isEmpty(host) || StringUtils.isEmpty(port)) {
-			    host = ((HttpCommandExecutor) rwd.getCommandExecutor()).getAddressOfRemoteServer().getHost();
-			    port = String.valueOf(((HttpCommandExecutor) rwd.getCommandExecutor()).getAddressOfRemoteServer().getPort());
-			}
-			vncURL = String.format(R.CONFIG.get("vnc_desktop"), protocol, host, port, rwd.getSessionId().toString());
-		}
-		return vncURL;
-	}
-	
-	@Override
+    @Override
+    public String getVncURL(WebDriver driver) {
+        String vncURL = null;
+        if (driver instanceof RemoteWebDriver && "true".equals(Configuration.getCapability("enableVNC"))) {
+            // TODO: resolve negative case when VNC is not supported
+            final RemoteWebDriver rwd = (RemoteWebDriver) driver;
+            String protocol = R.CONFIG.get(vnc_protocol);
+            String host = R.CONFIG.get(vnc_host);
+            String port = R.CONFIG.get(vnc_port);
+            // If VNC host/port not set user them from Selenium
+            if (StringUtils.isEmpty(host) || StringUtils.isEmpty(port)) {
+                host = ((HttpCommandExecutor) rwd.getCommandExecutor()).getAddressOfRemoteServer().getHost();
+                port = String.valueOf(((HttpCommandExecutor) rwd.getCommandExecutor()).getAddressOfRemoteServer().getPort());
+            }
+            vncURL = String.format(R.CONFIG.get("vnc_desktop"), protocol, host, port, rwd.getSessionId().toString());
+        }
+        return vncURL;
+    }
+
+    @Override
     protected int getBitrate(VideoQuality quality) {
         switch (quality) {
         case LOW:
@@ -146,7 +172,8 @@ public class DesktopFactory extends AbstractFactory {
             return 1;
         }
     }
-	
+
+    @SuppressWarnings("deprecation")
     private String getBrowserVersion(WebDriver driver) {
         String browser_version = Configuration.get(Parameter.BROWSER_VERSION);
         try {
@@ -160,6 +187,64 @@ public class DesktopFactory extends AbstractFactory {
         } catch (Exception e) {
             LOGGER.error("Unable to get actual browser version!", e);
         }
+        
+        // hotfix to https://github.com/qaprosoft/carina/issues/882
+        String browser = Configuration.get(Parameter.BROWSER);
+        if (BrowserType.OPERA.equalsIgnoreCase(browser) || BrowserType.OPERA_BLINK.equalsIgnoreCase(browser)) {
+            browser_version = getOperaVersion(driver);
+        }
         return browser_version;
+    }
+    
+    //TODO: reformat later using UserAgent for all browser version identification
+    private String getOperaVersion(WebDriver driver) {
+        String browser_version = Configuration.get(Parameter.BROWSER_VERSION);
+        try { 
+            String userAgent = (String) ((RemoteWebDriver) driver).executeScript("return navigator.userAgent", "");
+            LOGGER.debug("User Agent: " + userAgent);
+            Optional<String> version = getPartialBrowserVersion("OPR", userAgent);
+            if (version.isPresent()) {
+                browser_version = version.get();
+            }
+        } catch (Exception e){
+            // do nothing
+            LOGGER.debug("Unable to get browser_version using userAgent call!", e);
+        }
+        return browser_version;
+    }
+    
+    private Optional<String> getPartialBrowserVersion(String browserName, String userAgentResponse) {
+        return Arrays.stream(userAgentResponse.split(" "))
+                .filter(str -> isRequiredBrowser(browserName,str))
+                .findFirst().map(str -> str.split("/")[1].split("\\.")[0]);
+    }
+    
+    private Boolean isRequiredBrowser(String browser, String auCapabilitie) {
+        return auCapabilitie.split("/")[0].equalsIgnoreCase(browser);
+    }
+
+    /**
+     * Sets browser window according to capabilites.resolution value, otherwise
+     * maximizes window.
+     * 
+     * @param driver - instance of desktop @WebDriver
+     * @param capabilities - driver capabilities
+     */
+    private void resizeBrowserWindow(WebDriver driver, DesiredCapabilities capabilities) {
+        try {
+            if (capabilities.getCapability("resolution") != null) {
+                String resolution = (String) capabilities.getCapability("resolution");
+                int width = Integer.valueOf(resolution.split("x")[0]);
+                int height = Integer.valueOf(resolution.split("x")[1]);
+                driver.manage().window().setPosition(new Point(0, 0));
+                driver.manage().window().setSize(new Dimension(width, height));
+                LOGGER.info(String.format("Browser window size set to %dx%d", width, height));
+            } else {
+                driver.manage().window().maximize();
+                LOGGER.info("Browser window was maximized");
+            }
+        } catch (Exception e) {
+            LOGGER.error("Unable to resize browser window", e);
+        }
     }
 }

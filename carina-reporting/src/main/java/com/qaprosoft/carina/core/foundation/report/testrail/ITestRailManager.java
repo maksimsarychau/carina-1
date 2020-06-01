@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,20 +15,24 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.report.testrail;
 
-import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
-import com.qaprosoft.carina.core.foundation.utils.Configuration;
-import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
+import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import org.apache.log4j.Logger;
 import org.testng.ITestContext;
 import org.testng.ITestResult;
 
-import java.lang.reflect.Method;
-import java.util.*;
+import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
 
 public interface ITestRailManager extends ITestCases {
-    Logger LOGGER = Logger.getLogger(ITestRailManager.class);
+    static final Logger TESTRAIL_LOGGER = Logger.getLogger(ITestRailManager.class);
 
+    @SuppressWarnings("unlikely-arg-type")
     default Set<String> getTestRailCasesUuid(ITestResult result) {
         Set<String> testCases = new HashSet<String>();
 
@@ -51,7 +55,6 @@ public interface ITestRailManager extends ITestCases {
 
             testCases.addAll(dataProviderIds);
 
-            LOGGER.debug(dataProviderIds);
         }
 
         // Get a handle to the class and method
@@ -75,14 +78,13 @@ public interface ITestRailManager extends ITestCases {
                 if (testMethod.isAnnotationPresent(TestRailCases.class)) {
                     TestRailCases methodAnnotation = testMethod.getAnnotation(TestRailCases.class);
                     String platform = methodAnnotation.platform();
-                    String language = methodAnnotation.language();
                     String locale = methodAnnotation.locale();
-                    if (isValidPlatform(platform) && isValidLanguage(language) && isValidLocale(locale)) {
+                    if (isValidPlatform(platform) && isValidLocale(locale)) {
                         String[] testCaseList = methodAnnotation.testCasesId().split(",");
                         for (String tcase : testCaseList) {
                             String uuid = tcase;
                             testCases.add(uuid);
-                            LOGGER.debug("TestRail test case uuid '" + uuid + "' is registered.");
+                            TESTRAIL_LOGGER.debug("TestRail test case uuid '" + uuid + "' is registered.");
                         }
 
                     }
@@ -92,21 +94,20 @@ public interface ITestRailManager extends ITestCases {
                     for (TestRailCases tcLocal : methodAnnotation.value()) {
 
                         String platform = tcLocal.platform();
-                        String language = tcLocal.language();
                         String locale = tcLocal.locale();
-                        if (isValidPlatform(platform) && isValidLanguage(language) && isValidLocale(locale)) {
+                        if (isValidPlatform(platform) && isValidLocale(locale)) {
                             String[] testCaseList = tcLocal.testCasesId().split(",");
                             for (String tcase : testCaseList) {
                                 String uuid = tcase;
                                 testCases.add(uuid);
-                                LOGGER.debug("TestRail test case uuid '" + uuid + "' is registered.");
+                                TESTRAIL_LOGGER.debug("TestRail test case uuid '" + uuid + "' is registered.");
                             }
                         }
                     }
                 }
             }
         } catch (ClassNotFoundException e) {
-            LOGGER.error(e);
+            TESTRAIL_LOGGER.error(e.getMessage(), e);
         }
 
         // append cases id values from ITestCases map (custom TestNG provider)

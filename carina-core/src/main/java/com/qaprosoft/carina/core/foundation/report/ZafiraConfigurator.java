@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,21 +26,22 @@ import org.testng.ITestResult;
 
 import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
 import com.qaprosoft.carina.core.foundation.jira.Jira;
+import com.qaprosoft.carina.core.foundation.listeners.TestNamingListener;
 import com.qaprosoft.carina.core.foundation.performance.Timer;
 import com.qaprosoft.carina.core.foundation.report.qtest.IQTestManager;
 import com.qaprosoft.carina.core.foundation.report.testrail.ITestRailManager;
-import com.qaprosoft.carina.core.foundation.retry.RetryCounter;
+import com.qaprosoft.carina.core.foundation.utils.Configuration;
 import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
 import com.qaprosoft.carina.core.foundation.utils.R;
-import com.qaprosoft.carina.core.foundation.utils.naming.TestNamingUtil;
 import com.qaprosoft.carina.core.foundation.utils.ownership.Ownership;
-import com.qaprosoft.carina.core.foundation.utils.ownership.Ownership.OwnerType;
 import com.qaprosoft.carina.core.foundation.utils.tag.PriorityManager;
 import com.qaprosoft.carina.core.foundation.utils.tag.TagManager;
+import com.qaprosoft.carina.core.foundation.webdriver.IDriverPool;
 import com.qaprosoft.carina.core.foundation.webdriver.device.Device;
-import com.qaprosoft.carina.core.foundation.webdriver.device.DevicePool;
 import com.qaprosoft.zafira.config.IConfigurator;
-import com.qaprosoft.zafira.models.db.TestRun.DriverMode;
+import com.qaprosoft.zafira.listener.adapter.SuiteAdapter;
+import com.qaprosoft.zafira.listener.adapter.TestResultAdapter;
+import com.qaprosoft.zafira.models.db.workitem.BaseWorkItem;
 import com.qaprosoft.zafira.models.dto.TagType;
 import com.qaprosoft.zafira.models.dto.TestArtifactType;
 import com.qaprosoft.zafira.models.dto.config.ArgumentType;
@@ -52,36 +53,53 @@ import com.qaprosoft.zafira.models.dto.config.ConfigurationType;
  * @author akhursevich
  */
 public class ZafiraConfigurator implements IConfigurator, ITestRailManager, IQTestManager {
-    protected static final Logger LOGGER = Logger.getLogger(ZafiraConfigurator.class);
+    private static final Logger LOGGER = Logger.getLogger(ZafiraConfigurator.class);
+    
 
     @Override
     public ConfigurationType getConfiguration() {
         ConfigurationType conf = new ConfigurationType();
+        
+        // read all config parameter values and put into the Zafira configXML field
         for (Parameter parameter : Parameter.values()) {
             conf.getArg().add(buildArgumentType(parameter.getKey(), R.CONFIG.get(parameter.getKey())));
         }
-
-        if (R.CONFIG.containsKey(SpecialKeywords.ACTUAL_BROWSER_VERSION)) {
-            // update browser_version in returned config to register real value instead of * of matcher
-            conf.getArg().add(buildArgumentType("browser_version", R.CONFIG.get(SpecialKeywords.ACTUAL_BROWSER_VERSION)));
+        
+        // Override using actual platform, browser etc versions
+        
+        String platform = Configuration.getPlatform();
+        if (!platform.isEmpty() && !"*".equalsIgnoreCase(platform)) {
+            LOGGER.debug("Detected platform: '" + platform + "';");
+            conf.getArg().add(buildArgumentType("platform", platform));
         }
-
-        if (buildArgumentType("platform", R.CONFIG.get("os")).getValue() != null) {
-            // TODO: review and fix for 5.2.2.xx implementation
-            // add custom arguments from browserStack
-            conf.getArg().add(buildArgumentType("platform", R.CONFIG.get("os")));
-            conf.getArg().add(buildArgumentType("platform_version", R.CONFIG.get("os_version")));
+        
+        String platformVersion = Configuration.getPlatformVersion();
+        if (!platformVersion.isEmpty()) {
+            LOGGER.debug("Detected platform_version: '" + platformVersion + "';");
+            conf.getArg().add(buildArgumentType("platform_version", platformVersion));
         }
-
+        
+        String browser = Configuration.getBrowser();
+        if (!browser.isEmpty()) {
+            LOGGER.debug("Detected browser: '" + browser + "';");
+            conf.getArg().add(buildArgumentType("browser", browser));
+        }
+        
+        String browserVersion = Configuration.getBrowserVersion();
+        if (!browserVersion.isEmpty()) {
+            LOGGER.debug("Detected browser_version: '" + browserVersion + "';");
+            conf.getArg().add(buildArgumentType("browser_version", browserVersion));
+        }
+        
         long threadId = Thread.currentThread().getId();
 
         // add custom arguments from current mobile device
-        Device device = DevicePool.getDevice();
+        Device device = IDriverPool.getDefaultDevice();
         if (!device.getName().isEmpty()) {
             String deviceName = device.getName();
             String deviceOs = device.getOs();
             String deviceOsVersion = device.getOsVersion();
-
+            
             conf.getArg().add(buildArgumentType("device", deviceName));
             conf.getArg().add(buildArgumentType("platform", deviceOs));
             conf.getArg().add(buildArgumentType("platform_version", deviceOsVersion));
@@ -90,6 +108,7 @@ public class ZafiraConfigurator implements IConfigurator, ITestRailManager, IQTe
         } else {
             LOGGER.debug("Unable to detect current device for threadId: " + threadId);
         }
+        
         return conf;
     }
 
@@ -102,69 +121,75 @@ public class ZafiraConfigurator implements IConfigurator, ITestRailManager, IQTe
     }
 
     @Override
-    public String getOwner(ISuite suite) {
+    public String getOwner(SuiteAdapter suiteAdapter) {
+        ISuite suite = (ISuite) suiteAdapter.getSuite();
         String owner = suite.getParameter("suiteOwner");
         LOGGER.debug("owner: " + owner);
         return owner != null ? owner : "";
     }
 
     @Override
-    public String getPrimaryOwner(ITestResult test) {
+    public String getPrimaryOwner(TestResultAdapter testResultAdapter) {
         // TODO: re-factor that
-        String primaryOwner = Ownership.getMethodOwner(test, OwnerType.PRIMARY); 
+        ITestResult test = (ITestResult) testResultAdapter.getTestResult();
+        String primaryOwner = Ownership.getMethodOwner(test); 
         LOGGER.debug("primaryOwner: " + primaryOwner);
         return primaryOwner;
     }
 
+    //TODO need to remove this method from com.qaprosoft.zafira.config.IConfigurator
     @Override
-    public String getSecondaryOwner(ITestResult test) {
+    public String getSecondaryOwner(TestResultAdapter testResultAdapter) {
         // TODO: re-factor that
-        String secondaryOwner = Ownership.getMethodOwner(test, OwnerType.SECONDARY);
+        ITestResult test = (ITestResult) testResultAdapter.getTestResult();
+        String secondaryOwner = Ownership.getMethodOwner(test);
         LOGGER.debug("secondaryOwner: " + secondaryOwner);
         return secondaryOwner;
     }
 
     @Override
-    public String getTestName(ITestResult test) {
-        // TODO: avoid TestNamingUtil
-        String testName = TestNamingUtil.getCanonicalTestName(test);
-        LOGGER.debug("testName: " + testName);
-        return testName;
+    public String getTestName(TestResultAdapter testResultAdapter) {
+        ITestResult testResult = (ITestResult) testResultAdapter.getTestResult();
+        return TestNamingListener.getTestName(testResult);
     }
 
     @Override
-    public String getTestMethodName(ITestResult test) {
-        // TODO: avoid TestNamingUtil
-        String testMethodName = TestNamingUtil.getCanonicalTestMethodName(test);
-        LOGGER.debug("testMethodName: " + testMethodName);
-        return testMethodName;
+    public String getTestMethodName(TestResultAdapter testResultAdapter) {
+        ITestResult testResult = (ITestResult) testResultAdapter.getTestResult();
+        return testResult.getMethod().getMethodName();
     }
 
     @Override
-    public List<String> getTestWorkItems(ITestResult test) {
+    public List<String> getTestWorkItems(TestResultAdapter testResultAdapter) {
+        ITestResult test = (ITestResult) testResultAdapter.getTestResult();
         return Jira.getTickets(test);
     }
 
     @Override
-    public int getRunCount(ITestResult test) {
-        int runCount = RetryCounter.getRunCount();
-        LOGGER.debug("runCount: " + runCount);
-        return runCount;
+    public BaseWorkItem getTestKnownIssue(TestResultAdapter testResultAdapter) {
+        return Jira.getKnownIssue();
     }
 
     @Override
-    public Map<String, Long> getTestMetrics(ITestResult test) {
+    public void clearTestWorkItemArtifacts() {
+        Jira.clearJiraArtifacts();
+    }
+
+    @Override
+    public int getRunCount(TestResultAdapter testResultAdapter) {
+        //TODO: remove from zafira-client as seems useless
+        return 0;
+    }
+
+    @Override
+    public Map<String, Long> getTestMetrics(TestResultAdapter testResultAdapter) {
         return Timer.readAndClear();
     }
 
     @Override
-    public DriverMode getDriverMode() {
-        return DriverMode.valueOf("METHOD_MODE");
-    }
-
-    @Override
-    public Set<TagType> getTestTags(ITestResult test) {
+    public Set<TagType> getTestTags(TestResultAdapter testResultAdapter) {
         LOGGER.debug("Collecting TestTags...");
+        ITestResult test = (ITestResult) testResultAdapter.getTestResult();
         Set<TagType> tags = new HashSet<TagType>();
 
         String testPriority = PriorityManager.getPriority(test);
@@ -176,10 +201,10 @@ public class ZafiraConfigurator implements IConfigurator, ITestRailManager, IQTe
         }
 
         Map<String, String> testTags = TagManager.getTags(test);
-        testTags.entrySet().stream().forEach((entry) -> {
+        testTags.forEach((name, value) -> {
             TagType tagEntry = new TagType();
-            tagEntry.setName(entry.getKey());
-            tagEntry.setValue(entry.getValue());
+            tagEntry.setName(name);
+            tagEntry.setValue(value);
             tags.add(tagEntry);
         });
 
@@ -195,12 +220,16 @@ public class ZafiraConfigurator implements IConfigurator, ITestRailManager, IQTe
     }
 
     @Override
-    public Set<TestArtifactType> getArtifacts(ITestResult test) {
+    public Set<TestArtifactType> getArtifacts(TestResultAdapter testResultAdapter) {
         LOGGER.debug("Collecting artifacts...");
         // Generate additional artifacts links on test run
         return Artifacts.getArtifacts();
     }
 
+    @Override
+    public void clearArtifacts() {
+        Artifacts.clearArtifacts();
+    }
 
     //Moved them separately for future easier reusing if getTestTags will be overridden.
     //TODO: Should we make them public or protected?

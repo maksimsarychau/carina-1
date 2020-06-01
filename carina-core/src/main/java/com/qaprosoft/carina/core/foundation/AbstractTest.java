@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,6 @@ package com.qaprosoft.carina.core.foundation;
 
 import java.lang.annotation.Annotation;
 
-import org.apache.log4j.Logger;
 import org.testng.ITestContext;
 import org.testng.ITestNGMethod;
 import org.testng.SkipException;
@@ -25,49 +24,51 @@ import org.testng.annotations.BeforeClass;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.BeforeSuite;
 import org.testng.annotations.DataProvider;
-import org.testng.annotations.Listeners;
 
+import com.nordstrom.automation.testng.LinkedListeners;
 import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
 import com.qaprosoft.carina.core.foundation.dataprovider.core.DataProviderFactory;
 import com.qaprosoft.carina.core.foundation.listeners.CarinaListener;
+import com.qaprosoft.carina.core.foundation.listeners.TestNamingListener;
 import com.qaprosoft.carina.core.foundation.report.testrail.ITestCases;
 import com.qaprosoft.carina.core.foundation.utils.Configuration;
 import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
 import com.qaprosoft.carina.core.foundation.utils.common.CommonUtils;
-import com.qaprosoft.carina.core.foundation.utils.naming.TestNamingUtil;
-import com.qaprosoft.carina.core.foundation.webdriver.IDriverPool;
+import com.qaprosoft.carina.core.foundation.utils.factory.ICustomTypePageFactory;
+import com.qaprosoft.zafira.listener.ZebrunnerListener;
 
 /*
  * AbstractTest - base test for UI and API tests.
  * 
  * @author Alex Khursevich
  */
-@Listeners({ CarinaListener.class })
-public abstract class AbstractTest implements IDriverPool, ITestCases {
 
-    protected static final Logger LOGGER = Logger.getLogger(AbstractTest.class);
+// https://github.com/qaprosoft/carina/issues/951
+// reused com.nordstrom.tools.testng-foundation to register ordered listeners
+@LinkedListeners({CarinaListener.class, ZebrunnerListener.class, TestNamingListener.class})
+public abstract class AbstractTest implements ICustomTypePageFactory, ITestCases {
+
     protected static final long EXPLICIT_TIMEOUT = Configuration.getLong(Parameter.EXPLICIT_TIMEOUT);
     
-    
-    @BeforeSuite(alwaysRun = true)
-    private void onBeforeSuite() {
-        //do nothing
-    }
-    
-    @BeforeClass(alwaysRun = true)
-    private void onBeforeClass() {
-        //do nothing
-    }
-    
-    @BeforeMethod(alwaysRun = true)
-    private void onBeforeMethod() {
-        //do nothing
-    }
-    
+	@BeforeSuite(alwaysRun = true)
+	private void onCarinaBeforeSuite() {
+		// do nothing
+	}
+
+	@BeforeClass(alwaysRun = true)
+	private void onCarinaBeforeClass() {
+		// do nothing
+	}
+
+	@BeforeMethod(alwaysRun = true)
+	private void onCarinaBeforeMethod() {
+		// do nothing
+	}
+
     @DataProvider(name = "DataProvider", parallel = true)
     public Object[][] createData(final ITestNGMethod testMethod, ITestContext context) {
         Annotation[] annotations = testMethod.getConstructorOrMethod().getMethod().getDeclaredAnnotations();
-        Object[][] objects = DataProviderFactory.getNeedRerunDataProvider(annotations, context, testMethod);
+        Object[][] objects = DataProviderFactory.getDataProvider(annotations, context, testMethod);
         return objects;
     }
 
@@ -75,22 +76,15 @@ public abstract class AbstractTest implements IDriverPool, ITestCases {
     public Object[][] createDataSingleThread(final ITestNGMethod testMethod,
             ITestContext context) {
         Annotation[] annotations = testMethod.getConstructorOrMethod().getMethod().getDeclaredAnnotations();
-        Object[][] objects = DataProviderFactory.getNeedRerunDataProvider(annotations, context, testMethod);
+        Object[][] objects = DataProviderFactory.getDataProvider(annotations, context, testMethod);
         return objects;
     }
-
-    protected void setBug(String id) {
-        String test = TestNamingUtil.getTestNameByThread();
-        TestNamingUtil.associateBug(test, id);
-    }
-
     
     /**
      * Pause for specified timeout.
      *
      * @param timeout in seconds.
      */
-
     public void pause(long timeout) {
         CommonUtils.pause(timeout);
     }
@@ -102,5 +96,4 @@ public abstract class AbstractTest implements IDriverPool, ITestCases {
     protected void skipExecution(String message) {
         throw new SkipException(SpecialKeywords.SKIP_EXECUTION + ": " + message);
     }
-
 }

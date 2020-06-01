@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.remote.Command;
 import org.openqa.selenium.remote.HttpCommandExecutor;
 import org.openqa.selenium.remote.Response;
@@ -39,7 +38,7 @@ public class EventFiringSeleniumCommandExecutor extends HttpCommandExecutor {
     }
 
     @Override
-    public Response execute(Command command) throws WebDriverException, IOException {
+    public Response execute(Command command) throws IOException {
 
         Response response;
         for (IDriverCommandListener listener : listeners) {

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,8 +31,9 @@ import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
 import com.qaprosoft.carina.core.foundation.report.testrail.ITestCases;
 
 public interface IQTestManager extends ITestCases {
-    Logger LOGGER = Logger.getLogger(IQTestManager.class);
+    static final Logger QTEST_LOGGER = Logger.getLogger(IQTestManager.class);
 
+    @SuppressWarnings("unlikely-arg-type")
     default Set<String> getQTestCasesUuid(ITestResult result) {
         Set<String> testCases = new HashSet<String>();
 
@@ -52,7 +53,6 @@ public interface IQTestManager extends ITestCases {
 
             testCases.addAll(dataProviderIds);
 
-            LOGGER.debug(dataProviderIds);
         }
 
 
@@ -77,14 +77,13 @@ public interface IQTestManager extends ITestCases {
                 if (testMethod.isAnnotationPresent(QTestCases.class)) {
                     QTestCases methodAnnotation = testMethod.getAnnotation(QTestCases.class);
                     String platform = methodAnnotation.platform();
-                    String language = methodAnnotation.language();
                     String locale = methodAnnotation.locale();
-                    if (isValidPlatform(platform) && isValidLanguage(language) && isValidLocale(locale)) {
+                    if (isValidPlatform(platform) && isValidLocale(locale)) {
                         String[] testCaseList = methodAnnotation.id().split(",");
                         for (String tcase : testCaseList) {
                             String uuid = tcase;
                             testCases.add(uuid);
-                            LOGGER.debug("qTest test case uuid '" + uuid + "' is registered.");
+                            QTEST_LOGGER.debug("qTest test case uuid '" + uuid + "' is registered.");
                         }
 
                     }
@@ -94,21 +93,20 @@ public interface IQTestManager extends ITestCases {
                     for (QTestCases tcLocal : methodAnnotation.value()) {
 
                         String platform = tcLocal.platform();
-                        String language = tcLocal.language();
                         String locale = tcLocal.locale();
-                        if (isValidPlatform(platform) && isValidLanguage(language) && isValidLocale(locale)) {
+                        if (isValidPlatform(platform) && isValidLocale(locale)) {
                             String[] testCaseList = tcLocal.id().split(",");
                             for (String tcase : testCaseList) {
                                 String uuid = tcase;
                                 testCases.add(uuid);
-                                LOGGER.debug("qTest test case uuid '" + uuid + "' is registered.");
+                                QTEST_LOGGER.debug("qTest test case uuid '" + uuid + "' is registered.");
                             }
                         }
                     }
                 }
             }
         } catch (ClassNotFoundException e) {
-            LOGGER.error(e);
+            QTEST_LOGGER.error(e.getMessage(), e);
         }
 
         // append cases id values from ITestCases map (custom TestNG provider)

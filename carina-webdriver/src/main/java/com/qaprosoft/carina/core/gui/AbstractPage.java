@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,14 +19,23 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 
+import org.apache.log4j.Logger;
+import org.openqa.selenium.JavascriptExecutor;
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.support.ui.ExpectedCondition;
+import org.testng.Assert;
 
-import com.itextpdf.text.*;
+import com.itextpdf.text.Document;
+import com.itextpdf.text.DocumentException;
+import com.itextpdf.text.Image;
+import com.itextpdf.text.PageSize;
+import com.itextpdf.text.RectangleReadOnly;
 import com.itextpdf.text.pdf.PdfWriter;
+import com.qaprosoft.carina.core.foundation.listeners.TestNamingListener;
 import com.qaprosoft.carina.core.foundation.report.ReportContext;
 import com.qaprosoft.carina.core.foundation.utils.Configuration;
 import com.qaprosoft.carina.core.foundation.utils.Configuration.Parameter;
-import com.qaprosoft.carina.core.foundation.utils.naming.TestNamingUtil;
+import com.qaprosoft.carina.core.foundation.utils.factory.ICustomTypePageFactory;
 import com.qaprosoft.carina.core.foundation.webdriver.Screenshot;
 
 /**
@@ -34,12 +43,15 @@ import com.qaprosoft.carina.core.foundation.webdriver.Screenshot;
  * 
  * @author Alex Khursevich
  */
-public abstract class AbstractPage extends AbstractUIObject {
-    protected String pageURL = Configuration.get(Parameter.URL);
+public abstract class AbstractPage extends AbstractUIObject implements ICustomTypePageFactory {
 
-    public AbstractPage(WebDriver driver) {
-        super(driver);
-    }
+	private static final Logger LOGGER = Logger.getLogger(AbstractPage.class);
+    
+	protected String pageURL = getUrl();
+
+	public AbstractPage(WebDriver driver) {
+		super(driver);
+	}
 
     /**
      * Opens page according to specified in constructor URL.
@@ -68,23 +80,62 @@ public abstract class AbstractPage extends AbstractUIObject {
     }
 
     public boolean isPageOpened() {
-        return isPageOpened(this);
+        return isPageOpened(EXPLICIT_TIMEOUT);
     }
 
     public boolean isPageOpened(long timeout) {
-        return isPageOpened(this, timeout);
+        boolean isOpened = super.isPageOpened(this, timeout);
+        if (!isOpened) {
+            return false;
+        }
+
+        if (uiLoadedMarker != null) {
+            isOpened = uiLoadedMarker.isVisible(timeout);
+        }
+
+        if (!isOpened) {
+            LOGGER.warn(String.format(
+                    "Loaded page url is as expected but page loading marker element is not visible: %s",
+                    uiLoadedMarker.getBy().toString()));
+        }
+        return isOpened;
     }
+
+    /**
+     * Asserts whether page is opened or not. Inside there is a check for expected url matches actual page url.
+     * In addition if uiLoadedMarker is specified for the page it will check whether mentioned element presents on page or not.
+     */
+    public void assertPageOpened() {
+        assertPageOpened(EXPLICIT_TIMEOUT);
+    }
+
+    /**
+     * Asserts whether page is opened or not. Inside there is a check for expected url matches actual page url.
+     * In addition if uiLoadedMarker is specified for the page it will check whether mentioned element presents on page or not.
+     * 
+     * @param timeout Completing of page loading conditions will be verified within specified timeout
+     */
+    public void assertPageOpened(long timeout) {
+        if (!super.isPageOpened(this, timeout)) {
+            Assert.fail(String.format("%s not loaded: url is not as expected", getPageClassName()));
+        }
+
+        if (uiLoadedMarker != null) {
+            Assert.assertTrue(uiLoadedMarker.isVisible(timeout),
+                    String.format("%s not loaded: url is correct but page loading marker element is not visible: %s",
+                            getPageClassName(), uiLoadedMarker.getBy().toString()));
+        }
+    }
+
+	private String getPageClassName() {
+		return String.join(" ", this.getClass().getSimpleName().split("(?=\\p{Upper})"));
+	}
 
     public String savePageAsPdf(boolean scaled) throws IOException, DocumentException {
         String pdfName = "";
 
         // Define test screenshot root
-        String test = "";
-        if (TestNamingUtil.isTestNameRegistered()) {
-            test = TestNamingUtil.getTestNameByThread();
-        } else {
-            test = "undefined";
-        }
+        String test = TestNamingListener.getTestName();
 
         File testRootDir = ReportContext.getTestDir();
         File artifactsFolder = ReportContext.getArtifactsFolder();
@@ -94,7 +145,7 @@ public abstract class AbstractPage extends AbstractUIObject {
 
         String fullPdfPath = artifactsFolder.getAbsolutePath() + "/" + pdfName;
         // TODO: test this implementation and change back to capture if necessary
-        Image image = Image.getInstance(testRootDir.getAbsolutePath() + "/" + Screenshot.captureFailure(driver, ""));
+        Image image = Image.getInstance(testRootDir.getAbsolutePath() + "/" + Screenshot.capture(getDriver(), "", true));
         Document document = null;
         if (scaled) {
             document = new Document(PageSize.A4, 10, 10, 10, 10);
@@ -114,5 +165,55 @@ public abstract class AbstractPage extends AbstractUIObject {
 
     public String savePageAsPdf() throws IOException, DocumentException {
         return savePageAsPdf(true);
+    }
+
+	private String getUrl() {
+		String url = "";
+		if (Configuration.getEnvArg(Parameter.URL.getKey()).isEmpty()) {
+			url = Configuration.get(Parameter.URL);
+		} else {
+			url = Configuration.getEnvArg(Parameter.URL.getKey());
+		}
+		return url;
+	}
+
+    /**
+     * Waits till JS and jQuery (if applicable for the page) are completely processed on the page
+     */
+    public void waitForJSToLoad() {
+        waitForJSToLoad(EXPLICIT_TIMEOUT);
+    }
+
+    /**
+     * Waits till JS and jQuery (if applicable for the page) are completely processed on the page
+     * 
+     * @param timeout Completing of JS loading will be verified within specified timeout
+     */
+    public void waitForJSToLoad(long timeout) {
+        // wait for jQuery to load
+        JavascriptExecutor executor = (JavascriptExecutor) driver;
+        ExpectedCondition<Boolean> jQueryLoad = new ExpectedCondition<Boolean>() {
+            @Override
+            public Boolean apply(WebDriver driver) {
+                try {
+                    return ((Long) executor.executeScript("return jQuery.active") == 0);
+                } catch (Exception e) {
+                    return true;
+                }
+            }
+        };
+        // wait for Javascript to load
+        ExpectedCondition<Boolean> jsLoad = new ExpectedCondition<Boolean>() {
+            @Override
+            public Boolean apply(WebDriver driver) {
+                return executor.executeScript("return document.readyState").toString().equals("complete");
+            }
+        };
+        String errMsg = "JS was not loaded on page during expected time";
+        if ((Boolean) executor.executeScript("return window.jQuery != undefined")) {
+            Assert.assertTrue(waitUntil(jQueryLoad, timeout) && waitUntil(jsLoad, timeout), errMsg);
+        } else {
+            Assert.assertTrue(waitUntil(jsLoad, timeout), errMsg);
+        }
     }
 }

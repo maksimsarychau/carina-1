@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,8 +26,7 @@ import org.apache.commons.configuration2.builder.FileBasedConfigurationBuilder;
 import org.apache.commons.configuration2.builder.fluent.Parameters;
 import org.apache.commons.configuration2.tree.MergeCombiner;
 import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.log4j.Logger;
 
 import com.qaprosoft.alice.client.AliceClient;
 import com.qaprosoft.alice.client.AliceClient.Response;
@@ -43,7 +42,7 @@ import com.qaprosoft.carina.core.foundation.webdriver.ai.Label;
 public class AliceRecognition implements IRecognition {
     public static final AliceRecognition INSTANCE = new AliceRecognition();
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(AliceRecognition.class);
+    private static final Logger LOGGER = Logger.getLogger(AliceRecognition.class);
 
     private static final String ALICE_PROPERTIES = "alice.properties";
     private static final String ALICE_ENABLED = "alice_enabled";

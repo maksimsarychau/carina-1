@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,9 +32,9 @@ public class EdgeCapabilities extends AbstractCapabilities {
         capabilities.setCapability(CapabilityType.TAKES_SCREENSHOT, false);
         
         //update browser language
-        String browserLocale = Configuration.get(Parameter.BROWSER_LOCALE); 
-        if (!browserLocale.isEmpty()) {
-        	Assert.fail("Unable to change Edge locale via selenium! (" + browserLocale + ")");
+        String browserLang = Configuration.get(Parameter.BROWSER_LANGUAGE); 
+        if (!browserLang.isEmpty()) {
+        	Assert.fail("Unable to change Edge locale via selenium! (" + browserLang + ")");
         }
         return capabilities;
     }

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,7 +28,6 @@ import com.qaprosoft.carina.core.foundation.dataprovider.annotations.CsvDataSour
 import com.qaprosoft.carina.core.foundation.dataprovider.core.groupping.GroupByMapper;
 import com.qaprosoft.carina.core.foundation.dataprovider.parser.DSBean;
 import com.qaprosoft.carina.core.foundation.utils.ParameterGenerator;
-import com.qaprosoft.carina.core.foundation.utils.naming.TestNamingUtil;
 
 import au.com.bytecode.opencsv.CSVReader;
 
@@ -37,7 +36,7 @@ import au.com.bytecode.opencsv.CSVReader;
  */
 public class CsvDataProvider extends BaseDataProvider {
 
-    protected static final Logger LOGGER = Logger.getLogger(CsvDataProvider.class);
+    private static final Logger LOGGER = Logger.getLogger(CsvDataProvider.class);
     private Map<String, Integer> mapper = new HashMap<String, Integer>();
 
     private String executeColumn;
@@ -94,8 +93,7 @@ public class CsvDataProvider extends BaseDataProvider {
             reader = new CSVReader(new FileReader(csvFile), separator, quote);
             list = reader.readAll();
         } catch (IOException e) {
-            LOGGER.error("Unable to read data from CSV DataProvider", e.getCause());
-            e.printStackTrace();
+            LOGGER.error("Unable to read data from CSV DataProvider", e);
         }
 
         if (list.size() == 0) {
@@ -170,14 +168,11 @@ public class CsvDataProvider extends BaseDataProvider {
             testName = dsBean.setDataSorceUUID(testName, strings, mapper); // provide whole line from data provider for UUID generation
 
             HashMap<String, String> csvRow = (HashMap<String, String>) args[rowIndex][0];
-
-            canonicalTestNameArgsMap.put(String.valueOf(Arrays.hashCode(args[rowIndex])), TestNamingUtil.appendTestMethodName(testName, testMethod));
-            if (testMethodColumn.isEmpty()) {
-                testNameArgsMap.put(String.valueOf(Arrays.hashCode(args[rowIndex])), testName); // provide organized args to generate valid hash
-            } else {
-                // add testName value from csv datasource to special hashMap
+            
+            testNameArgsMap.put(String.valueOf(Arrays.hashCode(args[rowIndex])), testName);
+            if (!testMethodColumn.isEmpty()) {
+                // override testName value from xls datasource to special hashMap
                 addValueToSpecialMap(testNameArgsMap, testMethodColumn, String.valueOf(Arrays.hashCode(args[rowIndex])), csvRow);
-                addValueToSpecialMap(testMethodNameArgsMap, testMethodColumn, String.valueOf(Arrays.hashCode(args[rowIndex])), csvRow);
             }
 
             // add testMethoOwner from xls datasource to special hashMap

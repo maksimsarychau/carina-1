@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  * 
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ import net.lightbody.bmp.util.HttpMessageInfo;
  */
 public class CustomRsFilter implements ResponseFilter {
     
-    protected static final Logger LOGGER = Logger.getLogger(CustomRsFilter.class);
+    private static final Logger LOGGER = Logger.getLogger(CustomRsFilter.class);
 
     private List<RewriteItem> rewrites = new ArrayList<>();
 

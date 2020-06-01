@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,7 +22,7 @@ import org.apache.log4j.Logger;
 
 public class NetworkUtil {
 
-    protected static final Logger LOGGER = Logger.getLogger(NetworkUtil.class);
+    private static final Logger LOGGER = Logger.getLogger(NetworkUtil.class);
 
     public static String getIpAddress() {
         String currentIP = "0.0.0.0"; // localhost

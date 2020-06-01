@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,7 +29,7 @@ import com.qaprosoft.carina.core.foundation.webdriver.decorator.extractor.Abstra
 
 public class DivisionElementExtractor extends AbstractElementExtractor implements IDriverPool {
 
-    private Logger LOGGER = Logger.getLogger(DivisionElementExtractor.class);
+    private static final Logger LOGGER = Logger.getLogger(DivisionElementExtractor.class);
 
     @Override
     public ExtendedWebElement getElementsByCoordinates(int x, int y) {

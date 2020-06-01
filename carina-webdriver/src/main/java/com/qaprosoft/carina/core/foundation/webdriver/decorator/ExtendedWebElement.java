@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,9 +15,13 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.webdriver.decorator;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Proxy;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -41,7 +45,7 @@ import org.openqa.selenium.WebDriver;
 import org.openqa.selenium.WebDriverException;
 import org.openqa.selenium.WebElement;
 import org.openqa.selenium.interactions.Actions;
-import org.openqa.selenium.interactions.internal.Locatable;
+import org.openqa.selenium.interactions.Locatable;
 import org.openqa.selenium.remote.LocalFileDetector;
 import org.openqa.selenium.remote.RemoteWebDriver;
 import org.openqa.selenium.remote.RemoteWebElement;
@@ -66,6 +70,7 @@ import com.qaprosoft.carina.core.foundation.utils.common.CommonUtils;
 import com.qaprosoft.carina.core.foundation.webdriver.IDriverPool;
 import com.qaprosoft.carina.core.foundation.webdriver.listener.DriverListener;
 import com.qaprosoft.carina.core.foundation.webdriver.locator.ExtendedElementLocator;
+import com.sun.jersey.core.util.Base64;
 
 import io.appium.java_client.MobileBy;
 import io.appium.java_client.android.AndroidDriver;
@@ -78,7 +83,7 @@ public class ExtendedWebElement {
 
     private static final long RETRY_TIME = Configuration.getLong(Parameter.RETRY_INTERVAL);
 
-    private static Wait<WebDriver> wait;
+    
     
     // we should keep both properties: driver and searchContext obligatory
     // driver is used for actions, javascripts execution etc
@@ -97,6 +102,8 @@ public class ExtendedWebElement {
     
     private boolean caseInsensitive;
     
+    private ElementLoadingStrategy loadingStrategy = ElementLoadingStrategy.valueOf(Configuration.get(Parameter.ELEMENT_LOADING_STRATEGY));
+
     public ExtendedWebElement(WebElement element, String name, By by) {
         this(element, name);
         this.by = by;
@@ -221,7 +228,7 @@ public class ExtendedWebElement {
 				// that's the only place to use DriverPool to get driver.
 				this.driver = IDriverPool.getDriver(sessionId);
 			} else {
-				LOGGER.error(tempSearchContext);
+				LOGGER.error("Undefined error for searchContext: " + tempSearchContext.toString());
 			}
 		} catch (NoSuchFieldException e) {
 			e.printStackTrace();
@@ -231,7 +238,7 @@ public class ExtendedWebElement {
 			e.printStackTrace();
 		} catch (Throwable thr) {
 			thr.printStackTrace();
-			LOGGER.error("Unable to get Driver, serachContext and By via reflection!", thr);
+			LOGGER.error("Unable to get Driver, searchContext and By via reflection!", thr);
 		}
 		
     	if (this.searchContext == null) {
@@ -303,7 +310,8 @@ public class ExtendedWebElement {
 		final WebDriver drv = getDriver();
 		
 		Timer.start(ACTION_NAME.WAIT);
-		wait = new WebDriverWait(drv, timeout, RETRY_TIME).ignoring(WebDriverException.class)
+		
+		Wait<WebDriver> wait = new WebDriverWait(drv, timeout, RETRY_TIME).ignoring(WebDriverException.class)
 				.ignoring(NoSuchSessionException.class);
 		// StaleElementReferenceException is handled by selenium ExpectedConditions in many methods
 		try {
@@ -321,6 +329,10 @@ public class ExtendedWebElement {
 			LOGGER.debug("waitUntil: TimeoutException e..." + getNameWithLocator());
 			result = false;
 			originalException = e.getCause();
+		} catch (WebDriverException e) {
+            LOGGER.debug("waitUntil: WebDriverException e..." + getNameWithLocator());
+            result = false;
+            originalException = e.getCause();
 		}
 		catch (Exception e) {
 			LOGGER.error("waitUntil: " + getNameWithLocator(), e);
@@ -354,13 +366,20 @@ public class ExtendedWebElement {
     			//TODO: use-case when format method is used. Need investigate howto init context in this case as well
     			element = searchContext.findElement(by);
     		} else {
+    		    LOGGER.error("refindElement: searchContext is null for " + getNameWithLocator());
     			element = getDriver().findElement(by);	
     		}
 		} catch (StaleElementReferenceException | InvalidElementStateException e) {
 			LOGGER.debug("catched StaleElementReferenceException: ", e);
 			//use available driver to research again...
 			//TODO: handle case with rootBy to be able to refind also lists etc
-    		element = getDriver().findElement(by);
+            if (searchContext != null) {
+                //TODO: use-case when format method is used. Need investigate howto init context in this case as well
+                element = searchContext.findElement(by);
+            } else {
+                LOGGER.error("refindElement: searchContext is null for " + getNameWithLocator());
+                element = getDriver().findElement(by);  
+            }
     	} catch (WebDriverException e) {
     		// that's shouold fix use case when we switch between tabs and corrupt searchContext (mostly for Appium for mobile)
     		element = getDriver().findElement(by);
@@ -390,14 +409,22 @@ public class ExtendedWebElement {
      * @return By by
      */
     public By getBy() {
-        return by;
+        By value = by;
+        if (caseInsensitive) {
+            value = ExtendedElementLocator.toCaseInsensitive(by.toString());
+        }
+        return value;
     }
 
     public void setBy(By by) {
         this.by = by;
     }
 
-    @Override
+	public void setSearchContext(SearchContext searchContext) {
+		this.searchContext = searchContext;
+	}
+
+	@Override
     public String toString() {
         return name;
     }
@@ -566,7 +593,6 @@ public class ExtendedWebElement {
     public boolean clickIfPresent(long timeout) {
         boolean present = isElementPresent(timeout);
         if (present) {
-            captureElements();
             click();
         }
 
@@ -793,11 +819,8 @@ public class ExtendedWebElement {
      * @return element existence status.
      */
     public boolean isElementPresent(long timeout) {
-		// perform at once super-fast single selenium call and only if nothing
-		// found move to waitAction
-		//detectElement(); // it should do explicit findElement and reinitialize
-							// internal element member in case of success
-		if (element != null) {
+		// perform at once super-fast single selenium call and only if nothing found move to waitAction
+		if (!isMobile() && element != null) {
 			try {
 				if (element.isDisplayed()) {
 					return true;
@@ -809,30 +832,27 @@ public class ExtendedWebElement {
 
     	ExpectedCondition<?> waitCondition;
     	
-		if (element != null) {
-			waitCondition = ExpectedConditions.and(ExpectedConditions.visibilityOf(element),
-					ExpectedConditions.presenceOfElementLocated(getBy()));
-			boolean tmpResult = waitUntil(waitCondition, 0);
+        // [VD] replace presenceOfElementLocated and visibilityOf conditions by single "visibilityOfElementLocated"
+        // visibilityOf: Does not check for presence of the element as the error explains it.
+        // visibilityOfElementLocated: Checks to see if the element is present and also visible. To check visibility, it makes sure that the element
+        // has a height and width greater than 0.
+    	
+        waitCondition = ExpectedConditions.visibilityOfElementLocated(getBy());
+		boolean tmpResult = waitUntil(waitCondition, 0);
 
-			if (tmpResult) {
-				return true;
-			}
+		if (tmpResult) {
+			return true;
+		}
 
-			if (originalException != null && StaleElementReferenceException.class.equals(originalException.getClass())) {
-				LOGGER.debug("StaleElementReferenceException detected in isElementPresent!");
-				try {
-					refindElement();
-					waitCondition = ExpectedConditions.and(ExpectedConditions.visibilityOf(element),
-							ExpectedConditions.presenceOfElementLocated(getBy()));
-				} catch (NoSuchElementException e) {
-					// search element based on By if exception was thrown
-					waitCondition = ExpectedConditions.and(ExpectedConditions.visibilityOfElementLocated(getBy()),
-							ExpectedConditions.presenceOfElementLocated(getBy()));
-				}
+		if (originalException != null && StaleElementReferenceException.class.equals(originalException.getClass())) {
+			LOGGER.debug("StaleElementReferenceException detected in isElementPresent!");
+			try {
+				element = refindElement();
+                waitCondition = ExpectedConditions.visibilityOf(element);
+			} catch (NoSuchElementException e) {
+				// search element based on By if exception was thrown
+				waitCondition = ExpectedConditions.visibilityOfElementLocated(getBy());
 			}
-		} else {
-			waitCondition = ExpectedConditions.and(ExpectedConditions.visibilityOfElementLocated(getBy()),
-					ExpectedConditions.presenceOfElementLocated(getBy()));
 		}
 
     	return waitUntil(waitCondition, timeout);
@@ -894,8 +914,8 @@ public class ExtendedWebElement {
 		ExpectedCondition<?> waitCondition;
 
 		if (element != null) {
-			waitCondition = ExpectedConditions.or(ExpectedConditions.visibilityOf(element),
-					ExpectedConditions.visibilityOfElementLocated(getBy()));
+			waitCondition = ExpectedConditions.or(ExpectedConditions.visibilityOfElementLocated(getBy()),
+			        ExpectedConditions.visibilityOf(element));
 		} else {
 			waitCondition = ExpectedConditions.visibilityOfElementLocated(getBy());
 		}
@@ -1018,7 +1038,11 @@ public class ExtendedWebElement {
      */
     public ExtendedWebElement findExtendedWebElement(final By by, String name, long timeout) {
         if (isPresent(by, timeout)) {
-        	return new ExtendedWebElement(getElement().findElement(by), name, by);
+			try {
+				return new ExtendedWebElement(getCachedElement().findElement(by), name, by);
+			} catch (StaleElementReferenceException e) {
+				return new ExtendedWebElement(getElement().findElement(by), name, by);
+			}
         } else {
         	throw new NoSuchElementException("Unable to find dynamic element using By: " + by.toString());
         }
@@ -1033,7 +1057,11 @@ public class ExtendedWebElement {
         List<WebElement> webElements = new ArrayList<WebElement>();
         
         if (isPresent(by, timeout)) {
-        	webElements = getElement().findElements(by);
+			try {
+				webElements = getCachedElement().findElements(by);
+			} catch (StaleElementReferenceException e) {
+				webElements = getElement().findElements(by);
+			}
         } else {
         	throw new NoSuchElementException("Unable to find dynamic elements using By: " + by.toString());
         }
@@ -1055,6 +1083,14 @@ public class ExtendedWebElement {
         return extendedWebElements;
     }
 
+    /**
+     * @deprecated As of release 6.x, replaced by {@link #click()}. Can be used only for Web where JavascriptExecutor is supported.
+     * 
+     * @param x
+     * 			double x
+     * @param y
+     * 			double y
+     */
     @Deprecated
     public void tapWithCoordinates(double x, double y) {
         HashMap<String, Double> tapObject = new HashMap<String, Double>();
@@ -1069,7 +1105,13 @@ public class ExtendedWebElement {
     	try {
         	//TODO: investigate maybe searchContext better to use here!
     		//do direct selenium/appium search without any extra validations
-    		element = getDriver().findElement(by);
+            if (searchContext != null) {
+                //TODO: use-case when format method is used. Need investigate howto init context in this case as well
+                element = searchContext.findElement(by);
+            } else {
+                LOGGER.error("waitUntilElementDisappear: searchContext is null for " + getNameWithLocator());
+                element = getDriver().findElement(by);  
+            }
     	} catch (NoSuchElementException e) {
     		//element not present so means disappear
     		return true;
@@ -1079,9 +1121,9 @@ public class ExtendedWebElement {
     		return true;
     	}
 
-    	
-    	return waitUntil(ExpectedConditions.or(ExpectedConditions.stalenessOf(element),
-				ExpectedConditions.invisibilityOf(element)), timeout);
+        return waitUntil(ExpectedConditions.or(ExpectedConditions.invisibilityOfElementLocated(getBy()),
+                ExpectedConditions.stalenessOf(element),
+                ExpectedConditions.invisibilityOf(element)), timeout);
     }
 
     public ExtendedWebElement format(Object... objects) {
@@ -1097,10 +1139,14 @@ public class ExtendedWebElement {
         }
 
         if (locator.startsWith("By.xpath: ")) {
-            if (caseInsensitive) {
-                locator = ExtendedElementLocator.toCaseInsensitive(locator).toString();
+            locator = String.format(StringUtils.remove(locator, "By.xpath: "), objects);
+            if (!caseInsensitive) {
+                // generate xpath from locator string
+                by = By.xpath(locator);
+            } else {
+                // return by using toCaseInsensitive(locator) method. To avoid double By.xpath during formatting
+                by = ExtendedElementLocator.toCaseInsensitive(locator);
             }
-            by = By.xpath(String.format(StringUtils.remove(locator, "By.xpath: "), objects));
         }
         
         if (locator.startsWith("linkText: ")) {
@@ -1133,125 +1179,29 @@ public class ExtendedWebElement {
         if (locator.startsWith("By.AccessibilityId: ")) {
             by = MobileBy.AccessibilityId(String.format(StringUtils.remove(locator, "By.AccessibilityId: "), objects));
         }
+        
+        if (locator.startsWith("By.Image: ")) {
+            String formattedLocator = String.format(StringUtils.remove(locator, "By.Image: "), objects);
+            Path path = Paths.get(formattedLocator);
+            LOGGER.debug("Formatted locator is : " + formattedLocator);
+            String base64image;
+            try {
+                base64image = new String(Base64.encode(Files.readAllBytes(path)));
+            } catch (IOException e) {
+                throw new RuntimeException(
+                        "Error while reading image file after formatting. Formatted locator : " + formattedLocator, e);
+            }
+            LOGGER.debug("Base64 image representation has benn successfully obtained after formatting.");
+            by = MobileBy.image(base64image);
+        }
+
+        if (locator.startsWith("By.AndroidUIAutomator: ")) {
+            by = MobileBy.AndroidUIAutomator(String.format(StringUtils.remove(locator, "By.AndroidUIAutomator: "), objects));
+            LOGGER.debug("Formatted locator is : " + by.toString());
+        }
         return new ExtendedWebElement(by, name, getDriver());
     }
 
-    private void captureElements() {
-    	//TODO: take a look again when we need this functionality again
-    	return;
-
-/*        if (!Configuration.getBoolean(Parameter.SMART_SCREENSHOT)) {
-            return;
-        }
-
-        if (!BrowserType.CHROME.equalsIgnoreCase(Configuration.get(Parameter.BROWSER))) {
-            return;
-        }
-
-        String currentUrl;
-        if (!Configuration.get(Parameter.BROWSER).isEmpty()) {
-            currentUrl = driver.getCurrentUrl();
-        } else {
-            // change for XBox and looks like mobile part
-            currentUrl = driver.getTitle();
-        }
-
-        String cache = getUrlWithoutParameters(currentUrl);
-        if (!MetadataCollector.getAllCollectedData().containsKey(cache)) {
-            try {
-
-                ElementsInfo elementsInfo = new ElementsInfo();
-                elementsInfo.setCurrentURL(currentUrl);
-
-                String metadataScreenPath = Screenshot.captureMetadata(getDriver(), String.valueOf(cache.hashCode()));
-                // TODO: double check that file exist because due to the
-                // different reason screenshot can miss
-                File newPlace = new File(metadataScreenPath);
-
-                ScreenShootInfo screenShootInfo = new ScreenShootInfo();
-                screenShootInfo.setScreenshotPath(newPlace.getAbsolutePath());
-                BufferedImage bimg = ImageIO.read(newPlace);
-
-                screenShootInfo.setWidth(bimg.getWidth());
-                screenShootInfo.setHeight(bimg.getHeight());
-                elementsInfo.setScreenshot(screenShootInfo);
-
-                List<WebElement> all = driver.findElements(By.xpath("//*"));
-
-                List<WebElement> control = driver.findElements(
-                        By.xpath("//input[not(contains(@type,'hidden'))] | //button | .//*[contains(@class, 'btn') and not(self::span)] | //select"));
-
-                for (WebElement webElement : control) {
-                    ElementInfo elementInfo = getElementInfo(new ExtendedWebElement(webElement, driver));
-
-                    int elementPosition = all.indexOf(webElement);
-                    for (int i = 1; i < 5; i++) {
-                        if (elementPosition - i < 0) {
-                            break;
-                        }
-
-                        if (control.indexOf(all.get(elementPosition - i)) > 0) {
-                            break;
-                        }
-                        if (!all.get(elementPosition - i).isDisplayed()) {
-                            continue;
-                        }
-                        String sti = all.get(elementPosition - i).getText();
-                        if (sti == null || sti.isEmpty() || control.get(0).getText().equals(sti)) {
-                            continue;
-                        } else {
-                            elementInfo.setTextInfo(getElementInfo(new ExtendedWebElement(all.get(elementPosition - i), driver)));
-                            break;
-                        }
-                    }
-                    elementsInfo.addElement(elementInfo);
-                    MetadataCollector.putPageInfo(cache, elementsInfo);
-                }
-
-            } catch (IOException e) {
-                LOGGER.error("Unable to capture elements metadata!", e);
-            } catch (Exception e) {
-                LOGGER.error("Unable to capture elements metadata!", e);
-            } catch (Throwable thr) {
-                LOGGER.error("Unable to capture elements metadata!", thr);
-            }
-        }*/
-    }
-
-    /*    private String getUrlWithoutParameters(String url) {
-
-        try {
-            URI uri = new URI(url);
-            return new URI(uri.getScheme(), uri.getAuthority(), uri.getPath(), null, uri.getFragment()).toString();
-        } catch (URISyntaxException e) {
-            e.printStackTrace();
-        }
-        return url;
-    }
-
-    @SuppressWarnings("unchecked")
-    private ElementInfo getElementInfo(ExtendedWebElement extendedWebElement) {
-        ElementInfo elementInfo = new ElementInfo();
-        if (extendedWebElement.isElementPresent(1)) {
-            Point location = extendedWebElement.getElement().getLocation();
-            Dimension size = extendedWebElement.getElement().getSize();
-            elementInfo.setRect(new Rect(location.getX(), location.getY(), size.getWidth(), size.getHeight()));
-            elementInfo.setElementsAttributes(
-                    (Map<String, String>) ((RemoteWebDriver) driver).executeScript(ATTRIBUTE_JS, extendedWebElement.getElement()));
-
-            try {
-                elementInfo.setText(extendedWebElement.getText());
-            } catch (Exception e) {
-                elementInfo.setText("");
-            }
-
-            return elementInfo;
-        } else {
-            return null;
-        }
-
-    }
-*/
     /**
      * Pause for specified timeout.
      * 
@@ -1439,6 +1389,7 @@ public class ExtendedWebElement {
 			element = refindElement();
 			output = overrideAction(actionName, inputArgs);
 		} catch (WebDriverException e) {
+			// TODO: move to error for snapshot build to detect different negative use-cse and move to debug for released versions!
 			LOGGER.debug("catched WebDriverException: ", e);
 			// try to find again using driver
 			try {
@@ -1449,7 +1400,7 @@ public class ExtendedWebElement {
 			}
 			output = overrideAction(actionName, inputArgs);
 		} catch (Throwable e) {
-			LOGGER.error(e);
+		    LOGGER.error(e.getMessage(), e);
 			// print stack trace temporary to be able to handle any problem without extra debugging 
 			e.printStackTrace();
 			throw e;
@@ -1534,24 +1485,36 @@ public class ExtendedWebElement {
 			public void doType(String text) {
 				final String decryptedText = cryptoTool.decryptByPattern(text, CRYPTO_PATTERN);
 
-				DriverListener.setMessages(Messager.KEYS_CLEARED_IN_ELEMENT.getMessage(getName()),
-						Messager.KEYS_NOT_CLEARED_IN_ELEMENT.getMessage(getNameWithLocator()));
-				element.clear();
+/*				if (!element.getText().isEmpty()) {
+    				DriverListener.setMessages(Messager.KEYS_CLEARED_IN_ELEMENT.getMessage(getName()),
+    						Messager.KEYS_NOT_CLEARED_IN_ELEMENT.getMessage(getNameWithLocator()));
+    				element.clear();
+				}
+*/
+                DriverListener.setMessages(Messager.KEYS_CLEARED_IN_ELEMENT.getMessage(getName()),
+                        Messager.KEYS_NOT_CLEARED_IN_ELEMENT.getMessage(getNameWithLocator()));
+                element.clear();
 
-				DriverListener.setMessages(Messager.KEYS_SEND_TO_ELEMENT.getMessage(decryptedText, getName()),
-						Messager.KEYS_NOT_SEND_TO_ELEMENT.getMessage(decryptedText, getNameWithLocator()));
+				String textLog = (!decryptedText.equals(text) ? "********" : text);
+
+				DriverListener.setMessages(Messager.KEYS_SEND_TO_ELEMENT.getMessage(textLog, getName()),
+						Messager.KEYS_NOT_SEND_TO_ELEMENT.getMessage(textLog, getNameWithLocator()));
+
 				element.sendKeys(decryptedText);
 			}
+
 
 			@Override
 			public void doAttachFile(String filePath) {
 				final String decryptedText = cryptoTool.decryptByPattern(filePath, CRYPTO_PATTERN);
-				
-				DriverListener.setMessages(Messager.FILE_ATTACHED.getMessage(decryptedText, getName()),
-						Messager.FILE_NOT_ATTACHED.getMessage(decryptedText, getNameWithLocator()));
+
+				String textLog = (!decryptedText.equals(filePath) ? "********" : filePath);
+
+				DriverListener.setMessages(Messager.FILE_ATTACHED.getMessage(textLog, getName()),
+						Messager.FILE_NOT_ATTACHED.getMessage(textLog, getNameWithLocator()));
 
 				((JavascriptExecutor) getDriver()).executeScript("arguments[0].style.display = 'block';", element);
-				((RemoteWebDriver) getDriver()).setFileDetector(new LocalFileDetector());
+				((RemoteWebDriver) castDriver(getDriver())).setFileDetector(new LocalFileDetector());
 				element.sendKeys(decryptedText);
 			}
 
@@ -1625,8 +1588,10 @@ public class ExtendedWebElement {
 			public boolean doSelect(String text) {
 				final String decryptedSelectText = cryptoTool.decryptByPattern(text, CRYPTO_PATTERN);
 				
-				DriverListener.setMessages(Messager.SELECT_BY_TEXT_PERFORMED.getMessage(decryptedSelectText, getName()),
-						Messager.SELECT_BY_TEXT_NOT_PERFORMED.getMessage(decryptedSelectText, getNameWithLocator()));
+				String textLog = (!decryptedSelectText.equals(text) ? "********" : text);
+				
+				DriverListener.setMessages(Messager.SELECT_BY_TEXT_PERFORMED.getMessage(textLog, getName()),
+						Messager.SELECT_BY_TEXT_NOT_PERFORMED.getMessage(textLog, getNameWithLocator()));
 
 				
 				final Select s = new Select(element);
@@ -1725,6 +1690,13 @@ public class ExtendedWebElement {
 		return driver;
     }
     
+    private WebDriver castDriver(WebDriver drv) {
+        if (drv instanceof EventFiringWebDriver) {
+            drv = ((EventFiringWebDriver) drv).getWrappedDriver();
+        }
+        return drv;
+    }
+    
 	//TODO: investigate how can we merge the similar functionality in ExtendedWebElement, DriverHelper and LocalizedAnnotations
     public By generateByForList(By by, int index) {
         String locator = by.toString();
@@ -1778,17 +1750,44 @@ public class ExtendedWebElement {
         return resBy;
     }
     
+/*	private ExpectedCondition<?> getDefaultCondition(By myBy) {
+        // generate the most popular wiatCondition to check if element visible or present
+        return ExpectedConditions.or(ExpectedConditions.presenceOfElementLocated(myBy),
+                ExpectedConditions.visibilityOfElementLocated(myBy));
+    }*/
+
+    // old functionality to remove completely after successfull testing
     private ExpectedCondition<?> getDefaultCondition(By myBy) {
-    	//generate the most popular wiatCondition to check if element visible or present
-    	ExpectedCondition<?> waitCondition = null;
-		if (element != null) {
-			waitCondition = ExpectedConditions.or(ExpectedConditions.visibilityOfElementLocated(myBy),
-					ExpectedConditions.visibilityOf(element), ExpectedConditions.presenceOfElementLocated(myBy));
-		} else {
-			waitCondition = ExpectedConditions.or(ExpectedConditions.visibilityOfElementLocated(myBy),
-					ExpectedConditions.presenceOfElementLocated(myBy));
-		}
-		
-		return waitCondition;
+        // generate the most popular waitCondition to check if element visible or present
+        ExpectedCondition<?> waitCondition = null;
+        switch (loadingStrategy) {
+        case BY_PRESENCE: {
+            if (element != null) {
+                waitCondition = ExpectedConditions.or(ExpectedConditions.presenceOfElementLocated(myBy), ExpectedConditions.visibilityOf(element));
+            } else {
+                waitCondition = ExpectedConditions.presenceOfElementLocated(myBy);
+            }
+            break;
+        }
+        case BY_VISIBILITY: {
+            if (element != null) {
+                waitCondition = ExpectedConditions.or(ExpectedConditions.visibilityOfElementLocated(myBy), ExpectedConditions.visibilityOf(element));
+            } else {
+                waitCondition = ExpectedConditions.visibilityOfElementLocated(myBy);
+            }
+            break;
+        }
+        case BY_PRESENCE_OR_VISIBILITY:
+            if (element != null) {
+                waitCondition = ExpectedConditions.or(ExpectedConditions.presenceOfElementLocated(myBy),
+                        ExpectedConditions.visibilityOfElementLocated(myBy),
+                        ExpectedConditions.visibilityOf(element));
+            } else {
+                waitCondition = ExpectedConditions.or(ExpectedConditions.presenceOfElementLocated(myBy),
+                        ExpectedConditions.visibilityOfElementLocated(myBy));
+            }
+            break;
+        }
+        return waitCondition;
     }
 }

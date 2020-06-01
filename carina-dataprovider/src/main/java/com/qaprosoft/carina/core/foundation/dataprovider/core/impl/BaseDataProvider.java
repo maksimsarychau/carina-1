@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@ package com.qaprosoft.carina.core.foundation.dataprovider.core.impl;
 import java.lang.annotation.Annotation;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -33,15 +34,13 @@ import com.qaprosoft.carina.core.foundation.utils.ParameterGenerator;
 
 public abstract class BaseDataProvider {
 
-    protected Map<String, String> testNameArgsMap = Collections.synchronizedMap(new HashMap<String, String>());
-    protected Map<String, String> testMethodNameArgsMap = Collections.synchronizedMap(new HashMap<String, String>());
-    protected Map<String, String> canonicalTestNameArgsMap = Collections.synchronizedMap(new HashMap<String, String>());
+    protected Map<String, String> testNameArgsMap = Collections.synchronizedMap(new HashMap<>());
 
-    protected Map<String, String> testMethodOwnerArgsMap = Collections.synchronizedMap(new HashMap<String, String>());
+    protected Map<String, String> testMethodOwnerArgsMap = Collections.synchronizedMap(new HashMap<>());
 
-    protected Map<String, String> jiraArgsMap = Collections.synchronizedMap(new HashMap<String, String>());
-    protected Map<String, String> testRailsArgsMap = Collections.synchronizedMap(new HashMap<String, String>());
-    protected Map<String, String> bugArgsMap = Collections.synchronizedMap(new HashMap<String, String>());
+    protected Map<String, String> jiraArgsMap = Collections.synchronizedMap(new HashMap<>());
+    protected Map<String, String> testRailsArgsMap = Collections.synchronizedMap(new HashMap<>());
+    protected Map<String, String> bugArgsMap = Collections.synchronizedMap(new HashMap<>());
 
     protected List<String> argsList;
     protected List<String> staticArgsList;
@@ -57,10 +56,6 @@ public abstract class BaseDataProvider {
 
     public Map<String, String> getTestNameArgsMap() {
         return testNameArgsMap;
-    }
-
-    public Map<String, String> getTestMethodNameArgsMap() {
-        return testMethodNameArgsMap;
     }
 
     public Map<String, String> getTestMethodOwnerArgsMap() {
@@ -81,10 +76,6 @@ public abstract class BaseDataProvider {
 
     public List<String> getDoNotRunRowsIDs() {
         return doNotRunTestNames;
-    }
-
-    public Map<String, String> getCanonicalTestNameArgsMap() {
-        return canonicalTestNameArgsMap;
     }
 
 }

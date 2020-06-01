@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,12 +21,13 @@ import org.apache.log4j.Logger;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.jayway.restassured.response.Response;
 import com.qaprosoft.carina.core.foundation.utils.rest.RestUtil;
+
+import io.restassured.response.Response;
 
 public class NotificationUtils {
 
-    protected static final Logger LOGGER = Logger.getLogger(NotificationUtils.class);
+    private static final Logger LOGGER = Logger.getLogger(NotificationUtils.class);
 
     /**
      * call Push Service
@@ -71,7 +72,7 @@ public class NotificationUtils {
             }
 
         } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.error("callPushService failure", e);
         }
         return null;
     }
@@ -117,7 +118,7 @@ public class NotificationUtils {
             }
 
         } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.error("getPushServiceResponse failure", e);
         }
         return null;
     }
@@ -161,7 +162,7 @@ public class NotificationUtils {
             }
 
         } catch (Exception e) {
-            e.printStackTrace();
+            LOGGER.error("getGetServiceResponse failure", e);
         }
         return null;
     }

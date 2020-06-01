@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,10 @@
 package com.qaprosoft.carina.core.foundation.report.email;
 
 import java.util.*;
-
 import org.testng.ITestResult;
 
+import com.qaprosoft.carina.core.foundation.listeners.TestNamingListener;
 import com.qaprosoft.carina.core.foundation.report.TestResultItem;
-import com.qaprosoft.carina.core.foundation.utils.naming.TestNamingUtil;
 
 /**
  * EmailReportGenerator generates emailable report using data from test suite log.
@@ -42,7 +41,7 @@ public class EmailReportItemCollector {
     }
 
     public static synchronized TestResultItem pull(ITestResult result) {
-        return testResultsMap.get(TestNamingUtil.getCanonicalTestName(result));
+        return testResultsMap.get(TestNamingListener.getTestName());
     }
 
     public static List<TestResultItem> getTestResults() {

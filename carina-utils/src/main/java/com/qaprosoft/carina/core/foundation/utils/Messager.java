@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.utils;
 
+
 import org.apache.log4j.Logger;
 
 import com.qaprosoft.carina.core.foundation.utils.messager.IMessager;
@@ -29,29 +30,31 @@ import com.qaprosoft.carina.core.foundation.utils.messager.IMessager;
 // TODO: move to messager package
 public enum Messager implements IMessager {
 	
-    TEST_STARTED("INFO: %s TEST [%s] STARTED at [%s]"),
+    TEST_STARTED("%s TEST [%s] STARTED at [%s]"),
 
-    TEST_PASSED("INFO: %s TEST [%s] PASSED at [%s]"),
+    TEST_PASSED("%s TEST [%s] PASSED at [%s]"),
 
-    TEST_SKIPPED("INFO: %s TEST [%s] SKIPPED at [%s] - %s"),
+    TEST_SKIPPED("%s TEST [%s] SKIPPED at [%s] - %s"),
 
-    TEST_SKIPPED_AS_ALREADY_PASSED("INFO: %s TEST [%s] SKIPPED as already passed in previous run at [%s]"),
+    TEST_SKIPPED_AS_ALREADY_PASSED("%s TEST [%s] SKIPPED as already passed in previous run at [%s]"),
 
-    TEST_FAILED("INFO: %s TEST [%s] FAILED at [%s] - %s"),
+    TEST_SKIPPED_AS_ALREADY_FAILED_BY_BUG("%s TEST [%s] SKIPPED as already failed because of known issue at [%s]"),
 
-    RETRY_RETRY_FAILED("INFO: %s TEST [%s] RETRY %s of %s FAILED - %s"),
+    TEST_FAILED("%s TEST [%s] FAILED at [%s] - %s"),
 
-    CONFIG_STARTED("INFO: %s CONFIG [%s] START at [%s]"),
+    RETRY_FAILED("%s TEST [%s] RETRY %s of %s FAILED - %s"),
 
-    CONFIG_PASSED("INFO: %s CONFIG [%s] PASS at [%s]"),
+    CONFIG_STARTED("%s CONFIG [%s] START at [%s]"),
 
-    CONFIG_SKIPPED("INFO: %s CONFIG [%s] SKIP at [%s] - %s"),
+    CONFIG_PASSED("%s CONFIG [%s] PASS at [%s]"),
 
-    CONFIG_FAILED("INFO: %s CONFIG [%s] FAIL at [%s] - %s"),
+    CONFIG_SKIPPED("%s CONFIG [%s] SKIP at [%s] - %s"),
+
+    CONFIG_FAILED("%s CONFIG [%s] FAIL at [%s] - %s"),
 
     TEST_RESULT("RESULT #%s: TEST [%s] %s [%s]"),
 
-    OPENING_URL("INFO: url '%s' is being opening..."),
+    OPENING_URL("INFO: url '%s' is being opened..."),
     
     OPEN_URL("INFO: url '%s' is opened."),
     
@@ -75,19 +78,19 @@ public enum Messager implements IMessager {
 
     ELEMENT_PRESENT("PASS: element '%s' presents."),
 
-    ELEMENT_NOT_PRESENT("FAIL: element '%s' does not present!"),
+    ELEMENT_NOT_PRESENT("FAIL: element '%s' is not present!"),
     
     ELEMENT_CONDITION_NOT_VERIFIED("FAIL: %s - waitCondition for element '%s' not satisfied!"),
 
-    ELEMENT_NOT_PRESENT_PASS("PASS: element '%s' does not present"),
+    ELEMENT_NOT_PRESENT_PASS("PASS: element '%s' is not present"),
 
     ELEMENT_WITH_ATTRIBUTE_PRESENT("PASS: element '%s' with attribute '%s' = '%s' presents."),
 
-    ELEMENT_WITH_ATTRIBUTE_NOT_PRESENT("FAIL: element '%s' with attribute '%s' = '%s' does not present!"),
+    ELEMENT_WITH_ATTRIBUTE_NOT_PRESENT("FAIL: element '%s' with attribute '%s' = '%s' is not present!"),
 
     ELEMENT_WITH_TEXT_PRESENT("PASS: element '%s' with text '%s' presents."),
 
-    ELEMENT_WITH_TEXT_NOT_PRESENT("FAIL: element '%s' with text: '%s' does not present!"),
+    ELEMENT_WITH_TEXT_NOT_PRESENT("FAIL: element '%s' with text: '%s' is not present!"),
 
     UNEXPECTED_ELEMENT_PRESENT("FAIL: unexpected element '%s' present!"),
 
@@ -128,6 +131,10 @@ public enum Messager implements IMessager {
     KEYS_SEND_TO_ELEMENT("PASS: keys '%s' are sent to element '%s'."),
 
     KEYS_NOT_SEND_TO_ELEMENT("FAIL: keys '%s' are not sent to element '%s'!"),
+
+    UI_OBJECT_PRESENT("PASS: UI object '%s' presents!"),
+
+    UI_OBJECT_NOT_PRESENT("FAIL: UI object '%s' does not present!"),
 
     TITLE_CORERECT("PASS: page '%s' has correct title '%s'."),
 
@@ -182,7 +189,7 @@ public enum Messager implements IMessager {
     TAP_EXECUTED("PASS: Tap on X:'%s' Y:'%s' was executed."),
 
     TAP_NOT_EXECUTED("FAIL: Tap on X:'%s' Y:'%s' was not executed.");
-
+    
     private static final Logger LOGGER = Logger.getLogger(Messager.class);
 
     private String pattern;

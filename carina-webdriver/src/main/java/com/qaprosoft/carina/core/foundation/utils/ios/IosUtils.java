@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,9 +22,9 @@ import com.qaprosoft.carina.core.foundation.utils.mobile.MobileUtils;
 import io.appium.java_client.ios.IOSDriver;
 
 /**
- * Useful iOS utilities. For usage: import
- * com.qaprosoft.carina.core.foundation.utils.ios.IosUtils;
- *
+ * @deprecated use 
+ * 			{@link com.qaprosoft.carina.core.foundation.utils.ios.IIosUtils} 
+ * 			instead.
  */
 public class IosUtils extends MobileUtils {
 

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -31,7 +31,7 @@ import com.qaprosoft.carina.core.foundation.exception.PlaceholderResolverExcepti
  * @author Alexey Khursevich (hursevich@gmail.com)
  */
 public class PlaceholderResolver {
-    protected static final Logger LOGGER = Logger.getLogger(PlaceholderResolver.class);
+    private static final Logger LOGGER = Logger.getLogger(PlaceholderResolver.class);
 
     private static final Pattern PATTERN = Pattern.compile(SpecialKeywords.PLACEHOLER);
 
@@ -55,9 +55,9 @@ public class PlaceholderResolver {
                 }
             }
         } else {
-            if (!key.startsWith(SpecialKeywords.CAPABILITIES)) {
-                LOGGER.warn("Value not resolved by key: " + key);
-            }
+			if (!key.startsWith(SpecialKeywords.CAPABILITIES) && !key.endsWith(Configuration.Parameter.URL.getKey())) {
+				LOGGER.warn("Value not resolved by key: " + key);
+			}
         }
         return value;
     }

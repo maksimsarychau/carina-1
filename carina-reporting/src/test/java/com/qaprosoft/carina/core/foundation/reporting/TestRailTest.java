@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,7 @@ import com.qaprosoft.zafira.models.dto.TagType;
  */
 public class TestRailTest implements ITestRailManager {
 
-    protected static final Logger LOGGER = Logger.getLogger(TestRailTest.class);
+    private static final Logger LOGGER = Logger.getLogger(TestRailTest.class);
 
     private static final String TEST_ID = "5,6,65500";
     private static final String EXPECTED_TEST_ID = "65500";
@@ -182,23 +182,4 @@ public class TestRailTest implements ITestRailManager {
         R.CONFIG.put(Parameter.LOCALE.getKey(), "en");
     }
 
-    @Test
-    @TestRailCases(testCasesId = FIRST_TEST_ID, language = "en")
-    @TestRailCases(testCasesId = SECOND_TEST_ID, language = "fr")
-    public void testTestRailBylanguage() {
-        ITestResult result = Reporter.getCurrentTestResult();
-
-        Set<String> testRailUdids = getTestRailCasesUuid(result);
-
-        Assert.assertTrue(testRailUdids.contains(FIRST_TEST_ID), "TestRail should contain id=" + FIRST_TEST_ID);
-        Assert.assertEquals(testRailUdids.size(), 1);
-
-        R.CONFIG.put(Parameter.LANGUAGE.getKey(), "fr");
-        testRailUdids = getTestRailCasesUuid(result);
-
-        Assert.assertTrue(testRailUdids.contains(SECOND_TEST_ID), "TestRail should contain id=" + SECOND_TEST_ID);
-        Assert.assertEquals(testRailUdids.size(), 1);
-        
-        R.CONFIG.put(Parameter.LANGUAGE.getKey(), "en");
-    }
 }

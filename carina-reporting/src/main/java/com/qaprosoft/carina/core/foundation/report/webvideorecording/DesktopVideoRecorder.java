@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2018 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ public class DesktopVideoRecorder {
      */
     private ScreenRecorder screenRecorder;
 
-    protected static final Logger LOGGER = Logger.getLogger(DesktopVideoRecorder.class);
+    private static final Logger LOGGER = Logger.getLogger(DesktopVideoRecorder.class);
 
     public enum VideoFormat {
         AVI,
