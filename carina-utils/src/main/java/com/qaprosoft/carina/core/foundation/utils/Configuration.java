@@ -176,13 +176,7 @@ public class Configuration {
 
         SUITE_NAME("suite_name"),
 
-        JIRA_UPDATER("jira_updater"),
-
         JIRA_URL("jira_url"),
-
-        JIRA_USER("jira_user"),
-
-        JIRA_PASSWORD("jira_password"),
 
         TEST_NAMING_PATTERN("test_naming_pattern"),
         
@@ -267,9 +261,7 @@ public class Configuration {
         IGNORE_SSL("ignore_ssl"),
 
         // Test Execution Filter rules
-        TEST_RUN_RULES("test_run_rules"),
-
-        HUB_MODE("hub_mode");
+        TEST_RUN_RULES("test_run_rules");
 
         private final String key;
 
