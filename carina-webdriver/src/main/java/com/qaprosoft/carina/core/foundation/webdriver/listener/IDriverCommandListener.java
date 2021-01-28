@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.webdriver.listener;
 
+import org.apache.log4j.Logger;
 import org.openqa.selenium.remote.Command;
 import org.openqa.selenium.remote.RemoteWebDriver;
 
@@ -24,6 +25,7 @@ import org.openqa.selenium.remote.RemoteWebDriver;
  * @author akhursevich
  */
 public interface IDriverCommandListener {
+    static final Logger LISTENER_LOGGER = Logger.getLogger(IDriverCommandListener.class);
 
 	/**
 	 * Triggered before command execution.
@@ -38,4 +40,5 @@ public interface IDriverCommandListener {
 	 * @param command {@link Command}
 	 */
 	void afterEvent(Command command);
+	
 }

@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,6 +15,7 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.utils.android;
 
+import java.lang.invoke.MethodHandles;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
@@ -22,7 +23,8 @@ import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import org.apache.log4j.Logger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.qaprosoft.carina.core.foundation.utils.android.DeviceTimeZone.TimeFormat;
 import com.qaprosoft.carina.core.foundation.utils.android.recorder.utils.CmdLine;
@@ -40,7 +42,7 @@ import io.appium.java_client.android.AndroidDriver;
 
 public class AndroidService implements IDriverPool, IAndroidUtils {
 
-    private static final Logger LOGGER = Logger.getLogger(AndroidService.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     protected static final int INIT_TIMEOUT = 20;
 
@@ -119,7 +121,7 @@ public class AndroidService implements IDriverPool, IAndroidUtils {
         String result = executeAdbCommand("shell am start -n " + app);
         if (result.contains("Exception")) {
             String appPackage = app.split("/")[0];
-            if (!checkCurrentDeviceFocus(appPackage)) {
+            if (!isAppRunning(appPackage)) {
                 LOGGER.info("Expected app is not in focus. We will try another solution.");
                 executeAdbCommand("shell monkey -p " + appPackage + " -c android.intent.category.LAUNCHER 1");
             }
@@ -146,27 +148,6 @@ public class AndroidService implements IDriverPool, IAndroidUtils {
             return true;
         } else {
             LOGGER.error("Cache was not cleared. May be application does not exist on this device.");
-            return false;
-        }
-    }
-
-    /**
-     * checkCurrentDeviceFocus - return actual device focused apk and compare
-     * with expected.
-     *
-     * @param apk String
-     * @return boolean
-     */
-    /**
-     * @deprecated use {@link com.qaprosoft.carina.core.foundation.utils.android.IAndroidUtils#isAppRunning(String apk)} instead.
-     */
-    public boolean checkCurrentDeviceFocus(String apk) {
-        String res = getCurrentDeviceFocus();
-        if (res.contains(apk)) {
-            LOGGER.info("Actual device focus is as expected and contains package or activity: '" + apk + "'.");
-            return true;
-        } else {
-            LOGGER.error("Not expected apk '" + apk + "' is in focus. Actual result is: " + res);
             return false;
         }
     }
@@ -218,7 +199,7 @@ public class AndroidService implements IDriverPool, IAndroidUtils {
             LOGGER.info("Found activity name for application in focus : " + activityName);
             return packageName + "/" + activityName;
         } catch (Exception e) {
-            LOGGER.error(e);
+            LOGGER.error(e.getMessage(), e);
             return "";
         }
     }
@@ -302,7 +283,7 @@ public class AndroidService implements IDriverPool, IAndroidUtils {
             if (found) {
                 resultList.add(notification);
                 if (withLogger)
-                    LOGGER.info(notification);
+                    LOGGER.info(notification.getNotificationText());
                 notification = new Notification();
                 found = false;
             }
@@ -434,11 +415,11 @@ public class AndroidService implements IDriverPool, IAndroidUtils {
     public boolean findExpectedNotification(String expectedTitle, String expectedText, boolean partially) {
         // open notification
         try {
-            ((AndroidDriver) getDriver()).openNotifications();
+            ((AndroidDriver) castDriver()).openNotifications();
             CommonUtils.pause(2); // wait while notifications are playing animation to
             // appear to avoid missed taps
         } catch (Exception e) {
-            LOGGER.error(e);
+            LOGGER.error(e.getMessage(), e);
             LOGGER.info("Using adb to expand Status bar. ");
             expandStatusBar();
 
@@ -508,7 +489,7 @@ public class AndroidService implements IDriverPool, IAndroidUtils {
                 expandStatusBar();
             }
             LOGGER.debug("Page source [expand status bar]: ".concat(getDriver().getPageSource()));
-            Screenshot.capture(getDriver(), "Clear notification - screenshot. Status bar should be opened. Attempt: " + i);
+            Screenshot.captureByRule(getDriver(), "Clear notification - screenshot. Status bar should be opened. Attempt: " + i);
             try {
                 notificationPage.clearNotifications();
             } catch (Exception e) {
@@ -642,12 +623,12 @@ public class AndroidService implements IDriverPool, IAndroidUtils {
 
         int attemps = 3;
 
-        boolean isApkOpened = checkCurrentDeviceFocus(packageName);
+        boolean isApkOpened = isAppRunning(packageName);
         while (!isApkOpened && attemps > 0) {
             LOGGER.info("Apk was not open. Attempt to open...");
             openApp(activity);
             CommonUtils.pause(2);
-            isApkOpened = checkCurrentDeviceFocus(packageName);
+            isApkOpened = isAppRunning(packageName);
             attemps--;
         }
 
@@ -658,7 +639,7 @@ public class AndroidService implements IDriverPool, IAndroidUtils {
             CommonUtils.pause(2);
         }
 
-        if (checkCurrentDeviceFocus(packageName)) {
+        if (isAppRunning(packageName)) {
             LOGGER.info("On '" + packageName + "' apk page");
             res = true;
         } else {
@@ -800,6 +781,7 @@ public class AndroidService implements IDriverPool, IAndroidUtils {
      *
      * @param timeZone String required timeZone
      * @param timeFormat String 12 or 24
+     * @param gmtStamp String
      * @param settingsTZ TimeFormat
      * @param workflow ChangeTimeZoneWorkflow
      * @return boolean
@@ -959,7 +941,7 @@ public class AndroidService implements IDriverPool, IAndroidUtils {
 
         String actualTZ = getDeviceActualTimeZone();
 
-        String tz = DeviceTimeZone.getTimezoneOffset(timeZone);
+        // String tz = DeviceTimeZone.getTimezoneOffset(timeZone);
 
         if (isRequiredTimeZone(actualTZ, timeZone)) {
             LOGGER.info("Required timeZone is already set.");
@@ -1074,11 +1056,11 @@ public class AndroidService implements IDriverPool, IAndroidUtils {
         String tzPackageName = TZ_CHANGE_APP_PACKAGE;
         int attemps = 3;
 
-        boolean isTzOpened = checkCurrentDeviceFocus(tzPackageName);
+        boolean isTzOpened = isAppRunning(tzPackageName);
         while (!isTzOpened && attemps > 0) {
             LOGGER.info("TimeZoneChanger apk was not open. Attempt to open...");
             openTZChangingApk(turnOffAuto, timeFormat);
-            isTzOpened = checkCurrentDeviceFocus(tzPackageName);
+            isTzOpened = isAppRunning(tzPackageName);
             attemps--;
         }
 
@@ -1100,7 +1082,7 @@ public class AndroidService implements IDriverPool, IAndroidUtils {
             openTZChangingApk(turnOffAuto, timeFormat);
             res = false;
         }
-        if (checkCurrentDeviceFocus(tzPackageName)) {
+        if (isAppRunning(tzPackageName)) {
             LOGGER.info("On TZ changer apk page");
             res = true;
         } else {
@@ -1171,7 +1153,7 @@ public class AndroidService implements IDriverPool, IAndroidUtils {
             LOGGER.info("Output date: " + result);
 
         } catch (Exception e) {
-            LOGGER.error(e);
+            LOGGER.error(e.getMessage(), e);
         }
         return result;
     }
@@ -1188,7 +1170,7 @@ public class AndroidService implements IDriverPool, IAndroidUtils {
             SimpleDateFormat outputDateFormat = new SimpleDateFormat("yyyyMMdd.HHmmss");
             res = outputDateFormat.format(inputDate);
         } catch (Exception e) {
-            LOGGER.error(e);
+            LOGGER.error(e.getMessage(), e);
         }
         LOGGER.info("Output date in expected format: " + res);
         return res;

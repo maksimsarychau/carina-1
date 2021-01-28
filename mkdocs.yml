@@ -10,11 +10,11 @@ pages:
       - Mobile automation: automation/mobile.md
       - API automation: automation/api.md
     - Dataproviders: dataproviders.md
+    - Database usage: databases.md
     - Security: security.md
     - Contribution: contribution.md
     - Proxy: proxy.md
-    - Migration Steps: migration.md
-    - Release Notes: releases.md
+    - Cucumber: cucumber.md
 theme:
   name: 'material'
 repo_url: https://github.com/qaprosoft/carina

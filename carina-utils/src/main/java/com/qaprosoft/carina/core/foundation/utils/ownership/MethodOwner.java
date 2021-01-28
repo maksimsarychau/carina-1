@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,10 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.utils.ownership;
 
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Repeatable;
 import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
@@ -23,10 +26,18 @@ import java.lang.annotation.Target;
  * TestNG methods owners.
  * 
  */
-@Retention(value = java.lang.annotation.RetentionPolicy.RUNTIME)
-@Target(value = java.lang.annotation.ElementType.METHOD)
+@Repeatable(MethodOwner.List.class)
+@Retention(value = RetentionPolicy.RUNTIME)
+@Target(value = ElementType.METHOD)
 public @interface MethodOwner {
     String owner() default "";
 
-    String secondaryOwner() default "";
+    String platform() default "";
+    
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({ElementType.METHOD})
+    @interface List {
+    	MethodOwner[] value();
+    }
+    
 }

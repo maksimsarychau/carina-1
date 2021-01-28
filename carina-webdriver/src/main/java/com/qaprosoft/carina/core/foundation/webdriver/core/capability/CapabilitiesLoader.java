@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2013-2019 QaProSoft (http://www.qaprosoft.com).
+ * Copyright 2013-2020 QaProSoft (http://www.qaprosoft.com).
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,14 +15,16 @@
  *******************************************************************************/
 package com.qaprosoft.carina.core.foundation.webdriver.core.capability;
 
-import java.io.IOException;
+import java.lang.invoke.MethodHandles;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
 
-import org.apache.log4j.Logger;
 import org.openqa.selenium.remote.DesiredCapabilities;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.testng.Assert;
 
 import com.qaprosoft.carina.core.foundation.commons.SpecialKeywords;
 import com.qaprosoft.carina.core.foundation.utils.R;
@@ -32,17 +34,30 @@ import com.qaprosoft.carina.core.foundation.utils.R;
  */
 public class CapabilitiesLoader {
 
-    private static final Logger LOGGER = Logger.getLogger(CapabilitiesLoader.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
     /**
      * Load capabilities and properties from external file into the global CONFIG context.
-     * capabilities.<name>=<value> will be attached to each WebDriver capabilities
-     * <name>=<value> will override appropriate configuration parameter by new <value>
+     * {@code capabilities.<name>=<value> will be attached to each WebDriver capabilities
+     * <name>=<value> will override appropriate configuration parameter by new <value>}
      *  
      * @param fileName
      *            String path to the properties file with custom capabilities and properties
      */
     public void loadCapabilities(String fileName) {
+        loadCapabilities(fileName, false);
+    }
+    
+    /**
+     * Load capabilities and properties from external file into the global or current test CONFIG context.
+     * {@code capabilities.<name>=<value> will be attached to each WebDriver capabilities
+     * <name>=<value> will override appropriate configuration parameter by new <value>}
+     *  
+     * @param fileName
+     *            String path to the properties file with custom capabilities and properties
+     * @param currentTestOnly boolean
+     */
+    public void loadCapabilities(String fileName, boolean currentTestOnly) {
         LOGGER.info("Loading capabilities to global context from " + fileName);
         Properties props = loadProperties(fileName);
 
@@ -53,17 +68,20 @@ public class CapabilitiesLoader {
             String key = entry.getKey();
             LOGGER.info("Set custom property: " + key + "; value: " + value);
             // add each property directly into CONFIG
-            R.CONFIG.put(key, value);
+            R.CONFIG.put(key, value, currentTestOnly);
         }
 
     }
     
     /**
      * Generate DesiredCapabilities from external file.
-     * Only "capabilities.<name>=<value>" will be added to the response.
+     * Only "capabilities.name=value" will be added to the response.
      *  
      * @param fileName
      *            String path to the properties file with custom capabilities
+     *            
+     * @return desiredCapabilities
+     * 			DesiredCapabilities y
      */
     public DesiredCapabilities getCapabilities(String fileName) {
         DesiredCapabilities capabilities = new DesiredCapabilities();
@@ -105,10 +123,10 @@ public class CapabilitiesLoader {
                 props.load(baseResource.openStream());
                 LOGGER.info("Custom capabilities properties loaded: " + fileName);
             } else {
-                throw new RuntimeException("Unable to find custom capabilities file '" + fileName + "'!");
+                Assert.fail("Unable to find custom capabilities file '" + fileName + "'!");
             }
-        } catch (IOException e) {
-            throw new RuntimeException("Unable to load custom capabilities from '" + baseResource.getPath() + "'!", e);
+        } catch (Exception e) {
+            Assert.fail("Unable to load custom capabilities from '" + baseResource.getPath() + "'!", e);
         }
 
         return props;
